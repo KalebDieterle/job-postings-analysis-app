@@ -1,7 +1,7 @@
 import { db} from './index';
 import { postings, companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts } 
 from './schema';
-import { sql, count, desc} from 'drizzle-orm'
+import { eq, sql, count, desc} from 'drizzle-orm'
 
 // Test Query: total counts
 export async function getDatabaseStats() {
@@ -95,4 +95,107 @@ export async function getTopRolesTimeSeries(
     day: "", // no time-series available; single aggregate point
     count: Number(r.count),
   }));
+}
+
+// Get jobs by role title
+export async function getJobsByRole(roleTitle: string, limit = 100) {
+  try {
+    const results = await db
+      .select({
+        job_id: postings.job_id,
+        title: postings.title,
+        company_name: postings.company_name,
+        location: postings.location,
+        min_salary: postings.min_salary,
+        max_salary: postings.max_salary,
+        listed_time: postings.listed_time,
+      })
+      .from(postings)
+      .where(eq(postings.title, roleTitle))
+      .orderBy(desc(postings.listed_time))
+      .limit(limit);
+    
+    return results;
+  } catch (error) {
+    console.error('Error fetching jobs by role:', error);
+    throw error;
+  }
+}
+
+// Get top skills for a given role
+export async function getTopSkillsForRole(roleTitle: string, limit = 10) {
+  try {
+    const results = await db
+      .select({
+        skill_name: skills.skill_name,
+        skill_abr: skills.skill_abr,
+        count: count(),
+      })
+      .from(job_skills)
+      .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+      .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+      .where(eq(postings.title, roleTitle))
+      .groupBy(skills.skill_name, skills.skill_abr)
+      .orderBy(desc(count()))
+      .limit(limit);
+    
+    return results;
+  } catch (error) {
+    console.error('Error fetching skills for role:', error);
+    throw error;
+  }
+}
+
+
+// Get top companies hiring for a given role
+export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
+  try {
+    const results = await db
+      .select({
+        company_name: postings.company_name,
+        count: count(),
+      })
+      .from(postings)
+      .where(eq(postings.title, roleTitle))
+      .groupBy(postings.company_name)
+      .orderBy(desc(count()))
+      .limit(limit);
+    
+    return results;
+  } catch (error) {
+    console.error('Error fetching companies for role:', error);
+    throw error;
+  }
+}
+
+// Get role statistics
+export async function getRoleStats(roleTitle: string) {
+  try {
+    const results = await db
+      .select({
+        total_jobs: count(),
+        avg_min_salary: sql<number>`AVG(CAST(${postings.min_salary} AS DECIMAL))`,
+        avg_max_salary: sql<number>`AVG(CAST(${postings.max_salary} AS DECIMAL))`,
+      })
+      .from(postings)
+      .where(eq(postings.title, roleTitle));
+    
+    return results[0] || { total_jobs: 0, avg_min_salary: null, avg_max_salary: null };
+  } catch (error) {
+    console.error('Error fetching role stats:', error);
+    throw error;
+  }
+}
+
+// Get data quality metrics for a role where there is not missing skill data.
+export async function getRoleDataQuality(roleTitle: string) {
+  const result = await db
+    .select({
+      count: count(),
+    })
+    .from(postings)
+    .leftJoin(job_skills, eq(postings.job_id, job_skills.job_id))
+    .where(sql`${postings.title} = ${roleTitle} AND ${job_skills.job_id} IS NULL`);
+    
+  return result[0]?.count ?? 0;
 }

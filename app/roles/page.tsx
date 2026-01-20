@@ -1,14 +1,7 @@
 import React from "react";
 import { getTopJobRoles, getTopRolesTimeSeries } from "@/db/queries";
 import RoleCard from "@/components/ui/role-card";
-
-function slugify(s: string) {
-  return (s || "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-");
-}
+import { slugify } from "@/lib/slugify";
 
 const page = async () => {
   const roles = await getTopJobRoles(20);
@@ -29,7 +22,7 @@ const page = async () => {
           title={r.title}
           count={Number(r.count)}
           timeseries={timeseriesMap.get(r.title) ?? []}
-          href={`/roles/${slugify(r.title)}`}
+          href={slugify(r.title) ? `/roles/${slugify(r.title)}` : undefined}
         />
       ))}
     </div>
