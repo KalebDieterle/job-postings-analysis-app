@@ -48,3 +48,29 @@ export async function getRecentJobs(limit = 10){
 
     return results;
 }
+
+// Trending skills
+
+export async function getTrendingSkills(limit = 10) {
+try{
+  const results = await db
+    .select({
+      skill_abr: job_skills.skill_abr,
+      skill_name: skills.skill_name,
+      count: count(),
+    })
+    .from(job_skills)
+    .innerJoin(postings, sql`${job_skills.job_id} = ${postings.job_id}`)
+    .innerJoin(skills, sql`${job_skills.skill_abr} = ${skills.skill_abr}`)
+    //.where(sql`${postings.listed_time} >= CURRENT_TIMESTAMP - INTERVAL '7 days'`) // **UNCOMMENT ONCE UP-TO-DATE DATA IS AVAILABLE **
+    .groupBy(job_skills.skill_abr, skills.skill_name)
+    .orderBy(desc(count()))
+    .limit(limit);
+
+
+  return results;
+} catch (error) {
+  console.error("Error fetching trending skills:", error);
+  throw error;
+}
+}
