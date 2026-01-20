@@ -74,3 +74,25 @@ try{
   throw error;
 }
 }
+
+export async function getTopJobRoles(limit = 20){ 
+  const results = await db .select({ 
+  title: postings.title, 
+  count: count(), }) 
+  .from(postings) 
+  .groupBy(postings.title) 
+  .orderBy(desc(count())) 
+  .limit(limit); 
+  return results;
+}
+
+export async function getTopRolesTimeSeries(
+  topN = 20
+): Promise<{ title: string; day: string; count: number }[]> {
+  const top = await getTopJobRoles(topN);
+  return top.map((r: any) => ({
+    title: String(r.title),
+    day: "", // no time-series available; single aggregate point
+    count: Number(r.count),
+  }));
+}
