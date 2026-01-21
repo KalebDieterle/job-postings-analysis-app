@@ -1,7 +1,7 @@
 import { db} from './index';
-import { postings, companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts } 
+import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings } 
 from './schema';
-import { eq, sql, count, desc} from 'drizzle-orm'
+import { eq, sql, count, desc, inArray, ilike, gte, and} from 'drizzle-orm'
 
 // Test Query: total counts
 export async function getDatabaseStats() {
@@ -75,26 +75,79 @@ try{
 }
 }
 
-export async function getTopJobRoles(limit = 20){ 
-  const results = await db .select({ 
-  title: postings.title, 
-  count: count(), }) 
-  .from(postings) 
-  .groupBy(postings.title) 
-  .orderBy(desc(count())) 
-  .limit(limit); 
-  return results;
+export async function getTopJobRoles(
+  limit: number,
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  // 1. Initialize an empty array for conditions
+  const conditions = [];
+
+  // 2. Add conditions only if the filter has a value
+  if (filters?.location) {
+    conditions.push(ilike(postings.location, `%${filters.location}%`));
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    // Note: Make sure 'experienceLevel' in your schema maps to 'formatted_experience_level'
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(
+      gte(
+        sql<number>`CAST(NULLIF(${postings.min_salary}, '') AS NUMERIC)`,
+        filters.minSalary
+      )
+    );
+  }
+  
+  if (filters?.q) {
+  conditions.push(ilike(postings.title, `%${filters.q}%`));
 }
 
-export async function getTopRolesTimeSeries(
-  topN = 20
-): Promise<{ title: string; day: string; count: number }[]> {
-  const top = await getTopJobRoles(topN);
-  return top.map((r: any) => ({
-    title: String(r.title),
-    day: "", // no time-series available; single aggregate point
-    count: Number(r.count),
-  }));
+  // 3. Build the base query
+  const query = db
+    .select({
+      title: postings.title,
+      count: sql<number>`count(*)`,
+    })
+    .from(postings);
+
+  // 4. ONLY add the .where() clause if we have conditions
+  // This prevents the "WHERE postings" error
+  if (conditions.length > 0) {
+    query.where(and(...conditions));
+  }
+
+  // 5. Finalize and execute
+  return await query
+    .groupBy(postings.title)
+    .orderBy(desc(sql`count(*)`))
+    .limit(limit);
+}
+
+export async function getTopRolesTimeSeries(limit: number, days: number = 30) {
+  // We extract '.rows' so the function returns an array that can be looped over
+  const result = await db.execute(sql`
+    WITH top_roles AS (
+      SELECT title FROM ${postings}
+      GROUP BY title
+      ORDER BY count(*) DESC
+      LIMIT ${limit}
+    )
+    SELECT 
+      title,
+      date_trunc('day', listed_at)::text as day,
+      count(*) as count
+    FROM ${postings}
+    WHERE title IN (SELECT title FROM top_roles)
+      AND listed_at >= now() - interval '${sql.raw(days.toString())} days'
+    GROUP BY title, day
+    ORDER BY day ASC
+  `);
+
+  // Explicitly return the rows array as a typed object for your loop
+  return result.rows as unknown as { title: string; day: string; count: number }[];
 }
 
 // Get jobs by role title

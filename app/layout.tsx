@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/ui/providers/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/ui/app-sidebar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
+import { NuqsAdapter } from "nuqs/adapters/next/app"; // Import for Step 4
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,19 +38,25 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SidebarProvider>
-            <AppSidebar />
-            <main className="flex-1 overflow-auto w-full">
-              <div className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 relative">
-                <SidebarTrigger />
-                <h1 className="text-lg font-semibold">Job Market Analytics</h1>
-                <div className="absolute right-4">
-                  <ModeToggle />
+          {/* Wrap the entire interactive area in the NuqsAdapter */}
+          <NuqsAdapter>
+            <SidebarProvider>
+              <AppSidebar />
+              <main className="flex-1 overflow-auto w-full">
+                <div className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 relative">
+                  <SidebarTrigger />
+                  <h1 className="text-lg font-semibold">Job Market Analytics</h1>
+                  <div className="absolute right-4">
+                    <ModeToggle />
+                  </div>
                 </div>
-              </div>
-              <div className="p-6">{children}</div>
-            </main>
-          </SidebarProvider>
+                {/* The children (pages) will now be able to use 
+                   useQueryStates and useQueryState hooks.
+                */}
+                <div className="p-6">{children}</div>
+              </main>
+            </SidebarProvider>
+          </NuqsAdapter>
         </ThemeProvider>
       </body>
     </html>
