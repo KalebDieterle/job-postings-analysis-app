@@ -3,13 +3,13 @@
 import React, { useTransition } from "react";
 import { useQueryStates } from "nuqs";
 import { searchParamsSchema } from "@/lib/search-params";
-import { 
-  Loader2, 
-  Search, 
-  MapPin, 
-  Briefcase, 
-  DollarSign, 
-  X 
+import {
+  Loader2,
+  Search,
+  MapPin,
+  Briefcase,
+  DollarSign,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,10 +29,10 @@ export function FilterBar() {
   });
 
   // Updated check to include the new search query
-  const hasFilters = 
-    filters.q !== "" || 
-    filters.location !== "" || 
-    filters.experience.length > 0 || 
+  const hasFilters =
+    filters.q !== "" ||
+    filters.location !== "" ||
+    filters.experience.length > 0 ||
     filters.minSalary > 0;
 
   const clearFilters = () => {
@@ -46,7 +46,7 @@ export function FilterBar() {
 
   return (
     <div className="w-full space-y-2">
-      <div 
+      <div
         className={`flex flex-col md:flex-row gap-4 p-4 bg-card border rounded-xl shadow-sm transition-opacity ${
           isPending ? "opacity-50 pointer-events-none" : "opacity-100"
         }`}
@@ -76,11 +76,11 @@ export function FilterBar() {
         {/* 3. Experience Level Select */}
         <Select
           value={filters.experience?.[0] || "all"}
-          onValueChange={(val) => 
+          onValueChange={(val) =>
             setFilters({ experience: val === "all" ? [] : [val] })
           }
         >
-          <SelectTrigger className="w-full md:w-[180px] bg-background">
+          <SelectTrigger className="w-full md:w-45 bg-background">
             <Briefcase className="h-4 w-4 mr-2 text-muted-foreground" />
             <SelectValue placeholder="Experience" />
           </SelectTrigger>
@@ -95,14 +95,14 @@ export function FilterBar() {
         </Select>
 
         {/* 4. Min Salary Input */}
-        <div className="relative w-full md:w-[150px]">
+        <div className="relative w-full md:w-37.5">
           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="number"
             placeholder="Min Pay"
             className="pl-9 bg-background"
             value={filters.minSalary || ""}
-            onChange={(e) => 
+            onChange={(e) =>
               setFilters({ minSalary: parseInt(e.target.value) || 0 })
             }
           />
@@ -110,9 +110,9 @@ export function FilterBar() {
 
         {/* 5. Clear Button */}
         {hasFilters && (
-          <Button 
-            variant="ghost" 
-            onClick={clearFilters} 
+          <Button
+            variant="ghost"
+            onClick={clearFilters}
             className="h-10 px-3 hover:bg-destructive/10 hover:text-destructive transition-colors"
           >
             <X className="h-4 w-4 mr-2" />

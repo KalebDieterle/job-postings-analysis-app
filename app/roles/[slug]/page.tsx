@@ -22,8 +22,12 @@ interface PageProps {
 }
 
 export default async function RoleDetailPage({ params }: PageProps) {
+  console.log("🚀 [RoleDetailPage] Starting");
+  const pageStart = Date.now();
+
   const { slug } = await params;
   const slugStr = Array.isArray(slug) ? slug.join("-") : (slug ?? "");
+  console.log("📝 [RoleDetailPage] Slug:", slugStr);
 
   if (!slugStr) notFound();
 
@@ -32,6 +36,11 @@ export default async function RoleDetailPage({ params }: PageProps) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
+  console.log("📋 [RoleDetailPage] Title:", title);
+
+  console.log("📊 [RoleDetailPage] Fetching all data...");
+  const fetchStart = Date.now();
+
   const [jobs, skills, companies, stats] = await Promise.all([
     getJobsByRole(title, 50),
     getTopSkillsForRole(title, 10),
@@ -39,12 +48,19 @@ export default async function RoleDetailPage({ params }: PageProps) {
     getRoleStats(title),
   ]);
 
+  console.log(
+    `✅ [RoleDetailPage] Data fetched in ${Date.now() - fetchStart}ms`,
+  );
+  console.log(`   - Jobs: ${jobs.length}`);
+  console.log(`   - Skills: ${skills.length}`);
+  console.log(`   - Companies: ${companies.length}`);
+  console.log(`   - Stats:`, stats);
+
   // If no jobs found, show the empty state
   if (jobs.length === 0) {
+    console.log("⚠️ [RoleDetailPage] No jobs found, showing empty state");
     return (
       <div className="container mx-auto p-6 pt-10 space-y-8">
-        {" "}
-        {/* Increased pt-10 */}
         <Link href="/roles">
           <Button
             variant="ghost"
@@ -67,10 +83,10 @@ export default async function RoleDetailPage({ params }: PageProps) {
   const totalJobs = Number(stats.total_jobs);
   const topSkillCount = skills.length > 0 ? Number(skills[0].count) : 0;
 
+  console.log(`🎉 [RoleDetailPage] Total time: ${Date.now() - pageStart}ms`);
+
   return (
     <div className="container mx-auto p-6 pt-8">
-      {" "}
-      {/* Reduced pt here to let the wrapper handle it */}
       {/* 1. Dedicated Navigation Row */}
       <div className="flex items-center pb-6 mb-6 border-b border-border/40">
         <Link href="/roles">

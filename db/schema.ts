@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp, index, serial } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const benefits = pgTable("benefits", {
@@ -179,4 +179,14 @@ export const employeeCountsRelations = relations(employee_counts, ({ one }) => (
         fields: [employee_counts.company_id],
         references: [companies.company_id],
     }),
+}));
+
+export const roleAliases = pgTable('role_aliases', {
+  id: serial('id').primaryKey(),
+  canonical_name: text('canonical_name').notNull(),
+  alias: text('alias').notNull(),
+  job_count: integer('job_count').default(0),
+}, (table) => ({
+  aliasIdx: index('role_aliases_alias_idx').on(table.alias),
+  canonicalIdx: index('role_aliases_canonical_idx').on(table.canonical_name),
 }));
