@@ -1,10 +1,19 @@
 import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Briefcase, DollarSign, TrendingUp } from "lucide-react";
+import {
+  ChevronLeft,
+  Briefcase,
+  DollarSign,
+  TrendingUp,
+  Sparkles,
+  Award,
+  ArrowUpRight,
+  ArrowDownRight,
+  Building2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { CompanyCard } from "@/components/ui/company-card";
 import { RoleSkillsChart } from "@/components/ui/charts/role-skills-chart";
@@ -13,6 +22,7 @@ import {
   getTopSkillsForRole,
   getTopCompaniesForRole,
   getRoleStats,
+  getRoleGrowth, // Ensure this is exported in your db/queries.ts
 } from "@/db/queries";
 
 interface PageProps {
@@ -22,73 +32,66 @@ interface PageProps {
 }
 
 export default async function RoleDetailPage({ params }: PageProps) {
-  console.log("🚀 [RoleDetailPage] Starting");
+  console.log("🚀 [RoleDetailPage] Starting Render");
   const pageStart = Date.now();
 
   const { slug } = await params;
   const slugStr = Array.isArray(slug) ? slug.join("-") : (slug ?? "");
-  console.log("📝 [RoleDetailPage] Slug:", slugStr);
 
   if (!slugStr) notFound();
 
+  // Convert slug to a readable Title (e.g., "software-engineer" -> "Software Engineer")
   const title = slugStr
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
-  console.log("📋 [RoleDetailPage] Title:", title);
-
-  console.log("📊 [RoleDetailPage] Fetching all data...");
-  const fetchStart = Date.now();
-
-  const [jobs, skills, companies, stats] = await Promise.all([
+  // Parallel Fetching: Your 9700X handles these concurrent DB requests extremely well
+  const [jobs, skills, companies, stats, growth] = await Promise.all([
     getJobsByRole(title, 50),
     getTopSkillsForRole(title, 10),
     getTopCompaniesForRole(title, 10),
     getRoleStats(title),
+    getRoleGrowth(title),
   ]);
 
   console.log(
-    `✅ [RoleDetailPage] Data fetched in ${Date.now() - fetchStart}ms`,
+    `✅ [RoleDetailPage] Data fetched in ${Date.now() - pageStart}ms`,
   );
-  console.log(`   - Jobs: ${jobs.length}`);
-  console.log(`   - Skills: ${skills.length}`);
-  console.log(`   - Companies: ${companies.length}`);
-  console.log(`   - Stats:`, stats);
 
-  // If no jobs found, show the empty state
+  // Handle Empty State
   if (jobs.length === 0) {
-    console.log("⚠️ [RoleDetailPage] No jobs found, showing empty state");
     return (
       <div className="container mx-auto p-6 pt-10 space-y-8">
         <Link href="/roles">
           <Button
             variant="ghost"
             size="sm"
-            className="gap-2 -ml-2 text-muted-foreground hover:text-foreground"
+            className="gap-2 -ml-2 text-muted-foreground"
           >
             <ChevronLeft className="h-4 w-4" /> Back to All Roles
           </Button>
         </Link>
-        <div className="text-center py-20 border-2 border-dashed rounded-xl bg-muted/20">
+        <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-slate-50/50">
           <h1 className="text-3xl font-bold mb-2">{title}</h1>
           <p className="text-muted-foreground">
-            No active job postings found for this role.
+            No active job postings found for this role in the current dataset.
           </p>
         </div>
       </div>
     );
   }
 
+  // Derived Insight Data
   const totalJobs = Number(stats.total_jobs);
-  const topSkillCount = skills.length > 0 ? Number(skills[0].count) : 0;
-
-  console.log(`🎉 [RoleDetailPage] Total time: ${Date.now() - pageStart}ms`);
+  const topSkillName =
+    skills.length > 0 ? skills[0].skill_name : "Specialized skills";
+  const isPositiveGrowth = growth >= 0;
 
   return (
-    <div className="container mx-auto p-6 pt-8">
-      {/* 1. Dedicated Navigation Row */}
-      <div className="flex items-center pb-6 mb-6 border-b border-border/40">
+    <div className="container mx-auto p-6 pt-8 max-w-7xl">
+      {/* 1. Navigation */}
+      <div className="flex items-center pb-6">
         <Link href="/roles">
           <Button
             variant="ghost"
@@ -100,58 +103,106 @@ export default async function RoleDetailPage({ params }: PageProps) {
           </Button>
         </Link>
       </div>
-      {/* 2. Main Page Content */}
-      <div className="space-y-10">
-        {/* Header section with more air */}
-        <div className="space-y-2">
-          <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
-            {title}
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Market analysis and hiring trends for the current quarter.
-          </p>
-        </div>
 
-        {/* Stats Grid */}
+      <div className="space-y-10">
+        {/* 2. THE INSIGHT HEADER */}
+        <header className="relative overflow-hidden rounded-2xl border border-blue-100 bg-linear-to-br from-blue-50/50 via-white to-indigo-50/30 p-8 shadow-sm">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3" />
+                  Live Market Analysis
+                </div>
+
+                {/* Dynamic Growth Badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                    isPositiveGrowth
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                      : "bg-amber-100 text-amber-700 border border-amber-200"
+                  }`}
+                >
+                  {isPositiveGrowth ? (
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                  )}
+                  Postings {isPositiveGrowth ? "up" : "down"} {Math.abs(growth)}
+                  % this month
+                </div>
+              </div>
+
+              <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl text-slate-900">
+                {title}
+              </h1>
+
+              <p className="text-lg text-slate-600 font-medium max-w-3xl leading-relaxed">
+                {topSkillName} remains the most critical requirement for this
+                role. Demand is currently{" "}
+                {isPositiveGrowth ? "strengthening" : "shifting"} across{" "}
+                {companies.length} tracked companies.
+              </p>
+            </div>
+
+            {/* Contextual Stats Pill */}
+            <div className="hidden lg:flex items-center gap-2 bg-white px-5 py-3 rounded-xl border border-blue-100 shadow-sm">
+              <div className="p-2 bg-indigo-50 rounded-lg">
+                <Award className="w-6 h-6 text-indigo-600" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase text-slate-400 font-bold leading-tight">
+                  Primary Skill
+                </span>
+                <span className="text-base font-bold text-slate-800">
+                  {topSkillName}
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* 3. Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="Total Positions"
+            title="Market Demand"
             value={totalJobs.toLocaleString()}
             icon={Briefcase}
-            description={`${topSkillCount} of ${totalJobs} have skill data`}
+            description="Total active positions"
           />
           <StatCard
-            title="Avg Min Salary"
+            title="Avg Floor Salary"
             value={
               stats.avg_min_salary
                 ? `$${Math.round(Number(stats.avg_min_salary)).toLocaleString()}`
                 : "N/A"
             }
             icon={DollarSign}
-            description="Average floor salary"
+            description="Entry-level average"
           />
           <StatCard
-            title="Avg Max Salary"
+            title="Avg Ceiling Salary"
             value={
               stats.avg_max_salary
                 ? `$${Math.round(Number(stats.avg_max_salary)).toLocaleString()}`
                 : "N/A"
             }
             icon={DollarSign}
-            description="Average ceiling salary"
+            description="Senior-level average"
           />
           <StatCard
-            title="Companies Hiring"
-            value={companies.length}
+            title="Hiring Velocity"
+            value={growth > 5 ? "Fast" : growth > -5 ? "Stable" : "Cooling"}
             icon={TrendingUp}
-            description="Unique employers"
+            description="Based on 30-day trend"
           />
         </div>
 
-        {/* Content Layout */}
+        {/* 4. Content Layout: Charts and Lists */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Skill Visualization */}
           <div className="lg:col-span-2">
-            {skills.length > 0 && (
+            {skills.length > 0 ? (
               <RoleSkillsChart
                 data={skills.map((s) => ({
                   skill_name: s.skill_name,
@@ -159,14 +210,21 @@ export default async function RoleDetailPage({ params }: PageProps) {
                 }))}
                 roleTitle={title}
               />
+            ) : (
+              <div className="h-full min-h-100 flex items-center justify-center border-2 border-dashed rounded-2xl text-muted-foreground">
+                Insufficient skill data for visualization
+              </div>
             )}
           </div>
 
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              Top Hiring Companies
-            </h2>
+          {/* Company Leaderboard */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800">
+                <Building2 className="h-5 w-5 text-blue-600" />
+                Top Hiring Companies
+              </h2>
+            </div>
             <div className="flex flex-col gap-3">
               {companies.map((company, index) => (
                 <CompanyCard

@@ -1,7 +1,7 @@
 import { db} from './index';
 import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings, roleAliases } 
 from './schema';
-import { eq, sql, count, desc, inArray, ilike, gte, and, not} from 'drizzle-orm'
+import { eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt} from 'drizzle-orm'
 
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
@@ -420,9 +420,6 @@ export async function getRelatedSkills(skillName: string, limit = 5) {
   return relatedSkills;
 }
 
-
-
-
 // ===========================
 // Skill trending data by day
 // ===========================
@@ -440,4 +437,105 @@ export async function getSkillTrendingData(skillName: string) {
     .where(sql`lower(${skills.skill_name}) = ${skillLower}`)
     .groupBy(sql`date_trunc('day', to_timestamp(${postings.listed_time}::numeric / 1000))`)
     .orderBy(sql`date_trunc('day', to_timestamp(${postings.listed_time}::numeric / 1000)) ASC`);
+}
+
+export async function getRoleInsights(roleTitle: string) {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  // 1. Get count for last 30 days vs previous 30 days
+  const currentCount = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(postings)
+    .where(and(eq(postings.title, roleTitle), gte(postings.listed_time, thirtyDaysAgo)));
+
+  // 2. Get the top skill for this role
+  // This assumes you have a join table or skills associated with postings
+  const topSkill = await db
+    .select({ name: skills.skill_name, count: sql<number>`count(*)` })
+    .from(skills)
+    .innerJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(eq(postings.title, roleTitle))
+    .groupBy(skills.skill_name)
+    .orderBy(sql`count(*) DESC`)
+    .limit(1);
+
+  return {
+    count: currentCount[0]?.count || 0,
+    topSkill: topSkill[0]?.name || "N/A",
+    // Hardcoded trend for example, or calculate (current - previous) / previous
+    trend: 12 
+  };
+}
+
+export async function getRoleGrowth(title: string) {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+  const [currentPeriod, previousPeriod] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` })
+      .from(postings)
+      .where(and(eq(postings.title, title), gte(postings.listed_time, thirtyDaysAgo))),
+    db.select({ count: sql<number>`count(*)` })
+      .from(postings)
+      .where(and(
+        eq(postings.title, title), 
+        gte(postings.listed_time, sixtyDaysAgo), 
+        lt(postings.listed_time, thirtyDaysAgo)
+      )),
+  ]);
+
+  const current = currentPeriod[0].count || 0;
+  const previous = previousPeriod[0].count || 0;
+
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+export async function getTotalCompanyStats() {
+  const [counts] = await db
+    .select({
+      total_companies: count(companies.company_id),
+      total_postings: sql<number>`(SELECT count(*) FROM ${postings})`,
+    })
+    .from(companies);
+
+  const [leader] = await db
+    .select({
+      name: companies.name,
+      jobCount: count(postings.job_id),
+    })
+    .from(companies)
+    // We link the company name from 'postings' (column 29) 
+    // to the name in 'companies' (column 5)
+    .innerJoin(postings, eq(companies.name, postings.company_name)) 
+    .groupBy(companies.name)
+    .orderBy(desc(count(postings.job_id)))
+    .limit(1);
+
+  return {
+    total_companies: Number(counts?.total_companies ?? 0),
+    total_postings: Number(counts?.total_postings ?? 0),
+    top_company_name: leader?.name ?? "N/A",
+    top_company_postings: Number(leader?.jobCount ?? 0),
+  };
+}
+
+export async function getTopIndustries(limit = 5) {
+
+  const results = await db
+    .select({
+      industry_name: industries.industry_name,
+      count: count(),
+    })
+    .from(job_industries)
+    .innerJoin(postings, eq(job_industries.job_id, postings.job_id))
+    .innerJoin(industries, eq(job_industries.industry_id, industries.industry_id))
+    .groupBy(industries.industry_name)
+    .orderBy(desc(count()))
+    .limit(limit);
+
+  return results;
 }
