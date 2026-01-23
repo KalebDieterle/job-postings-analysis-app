@@ -15,7 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
-import { CompanyCard } from "@/components/ui/company-card";
+import { CompanyCardPerRole } from "@/components/ui/company-card-per-role";
 import { RoleSkillsChart } from "@/components/ui/charts/role-skills-chart";
 import {
   getJobsByRole,
@@ -46,7 +46,7 @@ export default async function RoleDetailPage({ params }: PageProps) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
-  // Parallel Fetching: Your 9700X handles these concurrent DB requests extremely well
+  // Parallel Fetching
   const [jobs, skills, companies, stats, growth] = await Promise.all([
     getJobsByRole(title, 50),
     getTopSkillsForRole(title, 10),
@@ -227,13 +227,14 @@ export default async function RoleDetailPage({ params }: PageProps) {
             </div>
             <div className="flex flex-col gap-3">
               {companies.map((company, index) => (
-                <CompanyCard
+                <CompanyCardPerRole
                   key={company.company_name}
                   name={company.company_name}
                   count={Number(company.count)}
                   rank={index + 1}
                 />
               ))}
+              <footer></footer>
             </div>
           </div>
         </div>

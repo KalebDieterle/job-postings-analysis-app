@@ -11,6 +11,7 @@ export const searchParamsSchema = {
   location: parseAsString.withDefault(''),
   experience: parseAsArrayOf(parseAsString).withDefault([]),
   minSalary: parseAsInteger.withDefault(0),
+  page: parseAsInteger.withDefault(1),
 };
 
 export const searchParamsCache = createSearchParamsCache(searchParamsSchema);

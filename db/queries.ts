@@ -260,15 +260,18 @@ export async function getTopSkillsForRole(roleTitle: string, limit = 10) {
 export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
   const roleLower = roleTitle.toLowerCase();
 
+
   const results = await db
     .select({
       company_name: postings.company_name,
       count: count(),
+      country: companies.country,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`lower(postings.title) = lower(${roleAliases.alias})`)
+    .leftJoin(companies, sql`lower(postings.company_name) = lower(${companies.name})`)
     .where(sql`coalesce(lower(${roleAliases.canonical_name}), lower(postings.title)) = ${roleLower}`)
-    .groupBy(postings.company_name)
+    .groupBy(postings.company_name, companies.country)
     .orderBy(desc(count()))
     .limit(limit);
 
@@ -506,12 +509,13 @@ export async function getTotalCompanyStats() {
     .select({
       name: companies.name,
       jobCount: count(postings.job_id),
+      country: companies.country,
     })
     .from(companies)
     // We link the company name from 'postings' (column 29) 
     // to the name in 'companies' (column 5)
     .innerJoin(postings, eq(companies.name, postings.company_name)) 
-    .groupBy(companies.name)
+    .groupBy(companies.name, companies.country)
     .orderBy(desc(count(postings.job_id)))
     .limit(1);
 
@@ -538,4 +542,50 @@ export async function getTopIndustries(limit = 5) {
     .limit(limit);
 
   return results;
+}
+
+interface GetAllCompanyDataParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  location?: string;
+}
+
+export async function getAllCompanyData({
+  limit = 50,
+  offset = 0,
+  search = "",
+  location = "",
+}: GetAllCompanyDataParams = {}) {
+  let query = db
+    .select({
+      name: companies.name,
+      country: companies.country,
+      company_size: sql<number>`MAX(${employee_counts.employee_count})`, // Use MAX or AVG
+      postings_count: sql<number>`COUNT(${postings.job_id})::int`,
+    })
+    .from(companies)
+    .leftJoin(
+      employee_counts, 
+      eq(companies.company_id, employee_counts.company_id)
+    )
+    .leftJoin(
+      postings,
+      eq(companies.name, postings.company_name)
+    )
+    .groupBy(companies.name, companies.country) // Remove employee_count from groupBy
+    .$dynamic();
+
+  if (search) {
+    query = query.where(ilike(companies.name, `%${search}%`));
+  }
+
+  if (location) {
+    query = query.where(eq(companies.country, location));
+  }
+
+  return await query
+    .orderBy(desc(sql`COUNT(${postings.job_id})`))
+    .limit(limit)
+    .offset(offset);
 }

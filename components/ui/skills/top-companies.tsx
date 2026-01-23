@@ -1,5 +1,5 @@
 import React from "react";
-import { CompanyCard } from "@/components/ui/company-card";
+import { CompanyCardPerRole } from "@/components/ui/company-card-per-role";
 
 export function TopCompaniesList({
   companies,
@@ -22,7 +22,7 @@ export function TopCompaniesList({
       <h3 className="text-lg font-semibold mb-4">Top Employers</h3>
       <div className="grid gap-3">
         {companies.map((c, i) => (
-          <CompanyCard
+          <CompanyCardPerRole
             key={c.name}
             name={c.name}
             count={c.count}

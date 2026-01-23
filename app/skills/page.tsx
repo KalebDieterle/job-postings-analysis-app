@@ -2,6 +2,7 @@ import { getAllSkills } from "@/db/queries";
 import { SkillCard } from "@/components/ui/skill-card";
 import { FilterBar } from "@/components/ui/filters/filter-bar";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -22,6 +23,17 @@ export default async function SkillsPage({
     limit,
   });
 
+  const hasNextPage = skillsData.length === limit;
+  const hasPrevPage = page > 1;
+
+  // Build query params for pagination links
+  const buildPageUrl = (pageNum: number) => {
+    const params = new URLSearchParams();
+    params.set("page", pageNum.toString());
+    if (search) params.set("q", search);
+    return `/skills?${params.toString()}`;
+  };
+
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div className="flex flex-col gap-2">
@@ -35,21 +47,50 @@ export default async function SkillsPage({
       <FilterBar />
 
       {skillsData.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {skillsData.map((skill) => (
-            <Link
-              key={skill.name}
-              href={`/skills/${encodeURIComponent(skill.name.toLowerCase())}`}
-              className="transition-transform hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <SkillCard
-                name={skill.name}
-                count={Number(skill.count)}
-                avgSalary={Number(skill.avg_salary)}
-              />
-            </Link>
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {skillsData.map((skill) => (
+              <Link
+                key={skill.name}
+                href={`/skills/${encodeURIComponent(skill.name.toLowerCase())}`}
+                className="transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <SkillCard
+                  name={skill.name}
+                  count={Number(skill.count)}
+                  avgSalary={Number(skill.avg_salary)}
+                />
+              </Link>
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-center gap-2 pt-4">
+            {hasPrevPage && (
+              <Link
+                href={buildPageUrl(page - 1)}
+                className="flex items-center gap-1 px-4 py-2 rounded-md border bg-card hover:bg-muted transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Link>
+            )}
+
+            <span className="px-4 py-2 text-sm text-muted-foreground">
+              Page {page}
+            </span>
+
+            {hasNextPage && (
+              <Link
+                href={buildPageUrl(page + 1)}
+                className="flex items-center gap-1 px-4 py-2 rounded-md border bg-card hover:bg-muted transition-colors"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            )}
+          </div>
+        </>
       ) : (
         <div className="text-center py-20 border-2 border-dashed rounded-xl">
           <h3 className="text-lg font-medium">No skills found</h3>
@@ -58,23 +99,6 @@ export default async function SkillsPage({
           </p>
         </div>
       )}
-
-      <div className="flex justify-center gap-4 pt-8">
-        {page > 1 && (
-          <Link
-            href={`/skills?page=${page - 1}${search ? `&q=${search}` : ""}`}
-            className="px-4 py-2 border rounded-md hover:bg-secondary"
-          >
-            Previous
-          </Link>
-        )}
-        <Link
-          href={`/skills?page=${page + 1}${search ? `&q=${search}` : ""}`}
-          className="px-4 py-2 border rounded-md hover:bg-secondary"
-        >
-          Next Page
-        </Link>
-      </div>
     </div>
   );
 }
