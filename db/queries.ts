@@ -1,7 +1,8 @@
+import { X } from 'lucide-react';
 import { db} from './index';
 import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings, roleAliases } 
 from './schema';
-import { eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt} from 'drizzle-orm'
+import { eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull} from 'drizzle-orm'
 
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
@@ -588,4 +589,97 @@ export async function getAllCompanyData({
     .orderBy(desc(sql`COUNT(${postings.job_id})`))
     .limit(limit)
     .offset(offset);
+}
+
+// db/queries.ts
+
+export async function getAverageCompanySalary() {
+  const companyAvgCte = db.$with("company_avg").as(
+    db
+      .select({
+        company_id: companies.company_id,
+        company: companies.name,
+        avg_salary: sql<number>`
+          AVG(
+            CAST(
+              NULLIF(
+                regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'),
+                ''
+              ) AS NUMERIC
+            )
+          )
+        `.as("avg_salary"),
+        posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
+      })
+      .from(companies)
+      .innerJoin(postings, sql`LOWER(${companies.name}) = LOWER(${postings.company_name})`)
+      .groupBy(companies.company_id, companies.name)
+  );
+
+  const globalAvgCte = db.$with("global_avg").as(
+    db.select({
+      global_avg_salary: sql<number>`
+        AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))
+      `.as("global_avg_salary"),
+    }).from(postings)
+  );
+
+  return db
+    .with(companyAvgCte, globalAvgCte)
+    .select({
+      company: companyAvgCte.company,
+      avg_salary: companyAvgCte.avg_salary,
+      posting_count: companyAvgCte.posting_count,
+      global_avg_salary: globalAvgCte.global_avg_salary,
+    })
+    .from(companyAvgCte)
+    .crossJoin(globalAvgCte)
+    .where(sql`${companyAvgCte.avg_salary} IS NOT NULL`)
+    .orderBy(desc(companyAvgCte.avg_salary))
+    .limit(10);
+}
+
+export async function getTopCompaniesBySize() {
+  const companySizeCte = db.$with("company_size").as(
+    db
+      .select({
+        company_id: companies.company_id,
+        company: companies.name,
+        employee_count: employee_counts.employee_count,
+        avg_salary: sql<number>`
+          COALESCE(
+            AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC)), 
+            0
+          )
+        `.as("avg_salary"),
+        posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
+      })
+      .from(companies)
+      .innerJoin(employee_counts, eq(companies.company_id, employee_counts.company_id))
+      // FIX: Use leftJoin so companies like Walmart show up even with 0 postings
+      .leftJoin(postings, sql`LOWER(${companies.name}) = LOWER(${postings.company_name})`)
+      .groupBy(companies.company_id, companies.name, employee_counts.employee_count)
+  );
+
+  const globalAvgCte = db.$with("global_avg").as(
+    db.select({
+      global_avg_salary: sql<number>`
+        AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))
+      `.as("global_avg_salary"),
+    }).from(postings)
+  );
+
+  return db
+    .with(companySizeCte, globalAvgCte)
+    .select({
+      company: companySizeCte.company,
+      employee_count: companySizeCte.employee_count,
+      avg_salary: companySizeCte.avg_salary,
+      posting_count: companySizeCte.posting_count,
+      global_avg_salary: globalAvgCte.global_avg_salary,
+    })
+    .from(companySizeCte)
+    .crossJoin(globalAvgCte)
+    .orderBy(desc(companySizeCte.employee_count)) // Order by size at DB level
+    .limit(10);
 }

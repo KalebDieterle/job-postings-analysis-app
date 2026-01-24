@@ -1,13 +1,19 @@
 import { IndustryRadarChart } from "@/components/ui/charts/industry-radar-chart";
 import { CompanyOverview } from "@/components/ui/company-overview";
+import { CompanyAvgSalaryGraph } from "@/components/ui/charts/company-avg-salary-graph";
 import { CompanyCard } from "@/components/ui/company-card";
 import { FilterBar } from "@/components/ui/filters/filter-bar";
+
 import { searchParamsCache } from "@/lib/search-params";
-import { getAllCompanyData } from "@/db/queries";
+import {
+  getAllCompanyData,
+  getAverageCompanySalary,
+  getTopCompaniesBySize,
+} from "@/db/queries";
+
 import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import React from "react";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -15,19 +21,51 @@ interface PageProps {
 
 const CompaniesPage = async ({ searchParams }: PageProps) => {
   const filters = await searchParamsCache.parse(searchParams);
+
   const page = filters.page || 1;
   const limit = 50;
   const offset = (page - 1) * limit;
 
-  const companies = await getAllCompanyData({
-    limit,
-    offset,
-    search: filters.q,
-    location: filters.location,
-  });
+  // =========================
+  // DATA FETCHING
+  // =========================
+  const [companies, salaryResults, sizeResults] = await Promise.all([
+    getAllCompanyData({
+      limit,
+      offset,
+      search: filters.q,
+      location: filters.location,
+    }),
+    getAverageCompanySalary(),
+    getTopCompaniesBySize(),
+  ]);
 
   const hasPrevPage = page > 1;
-  const hasNextPage = companies.length === limit; // If we got a full page, there might be more
+  const hasNextPage = companies.length === limit;
+
+  // =========================
+  // SALARY GRAPH SHAPING
+  // =========================
+  const salaryData = salaryResults
+    .slice(0, 10) // top 10 companies only
+    .map((row) => ({
+      company: row.company,
+      avg_salary: Number(row.avg_salary),
+      posting_count: Number(row.posting_count ?? 0),
+    }));
+
+  // Size data (by employee count)
+  const sizeData = sizeResults
+    .map((row) => ({
+      company: row.company,
+      avg_salary: Number(row.avg_salary ?? 0),
+      posting_count: Number(row.posting_count ?? 0),
+      employee_count: Number(row.employee_count ?? 0),
+    }));
+
+  const globalAvg = Number(
+    salaryResults[0]?.global_avg_salary ?? 0
+  );
 
   const buildPageUrl = (pageNum: number) => {
     const params = new URLSearchParams();
@@ -39,7 +77,7 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold mb-4">Company Explorer</h1>
+      <h1 className="text-3xl font-bold">Company Explorer</h1>
 
       <FilterBar />
 
@@ -47,10 +85,38 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
         <CompanyOverview />
       </Suspense>
 
+      {/* =========================
+          CHART SECTION
+         ========================= */}
       <Suspense>
-        <IndustryRadarChart />
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+          {/* LEFT: Avg Salary Bar Chart */}
+          <div className="col-span-2 rounded-xl border bg-background p-4">
+            <h3 className="text-sm font-medium mb-2">
+              Company Avg Salary vs Market
+            </h3>
+
+            <CompanyAvgSalaryGraph
+              data={salaryData}
+              sizeData={sizeData}
+              globalAvg={globalAvg}
+            />
+          </div>
+
+          {/* RIGHT: Radar Chart */}
+          <div className="col-span-3 rounded-xl border bg-background p-4">
+            <h3 className="text-sm font-medium mb-2">
+              Industry Hiring Distribution
+            </h3>
+
+            <IndustryRadarChart />
+          </div>
+        </div>
       </Suspense>
 
+      {/* =========================
+          RESULTS META
+         ========================= */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           Showing {offset + 1}–{offset + companies.length} companies
@@ -59,22 +125,21 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
         </p>
       </div>
 
+      {/* =========================
+          COMPANY CARDS
+         ========================= */}
       {companies.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {companies.map((company, index) => {
-            const count = company.postings_count ?? 0;
-
-            return (
-              <CompanyCard
-                key={`${company.name}-${offset + index}`}
-                name={company.name || "N/A"}
-                size={company.company_size?.toString() || "N/A"} // Convert to string
-                country={company.country || "N/A"}
-                rank={offset + index + 1}
-                count={count}
-              />
-            );
-          })}
+          {companies.map((company, index) => (
+            <CompanyCard
+              key={`${company.name}-${offset + index}`}
+              name={company.name || "N/A"}
+              size={company.company_size?.toString() || "N/A"}
+              country={company.country || "N/A"}
+              rank={offset + index + 1}
+              count={company.postings_count ?? 0}
+            />
+          ))}
         </div>
       ) : (
         <div className="text-center py-20 border-2 border-dashed rounded-xl">
@@ -85,7 +150,9 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
         </div>
       )}
 
-      {/* Pagination */}
+      {/* =========================
+          PAGINATION
+         ========================= */}
       <div className="flex items-center justify-center gap-2 mt-8">
         {hasPrevPage && (
           <Link
