@@ -190,3 +190,17 @@ export const roleAliases = pgTable('role_aliases', {
   aliasIdx: index('role_aliases_alias_idx').on(table.alias),
   canonicalIdx: index('role_aliases_canonical_idx').on(table.canonical_name),
 }));
+
+export const top_companies = pgTable('top_companies', {
+    id: serial('id').primaryKey(),
+    fortune_rank: integer('fortune_rank').notNull(),
+    revenue_m: text('revenue_m').notNull(), // numeric in DB, use text for compatibility or use decimal if supported
+    profit_m: text('profit_m').notNull(), // numeric in DB, use text for compatibility or use decimal if supported
+    market_value_m: text('market_value_m').notNull(), // numeric in DB, use text for compatibility or use decimal if supported
+    year: integer('year').notNull(),
+    name: text('name').notNull(),
+    hq_state: text('hq_state').notNull(),
+    industry: text('industry').notNull(),
+    sector: text('sector').notNull(),
+    hq_city: text('hq_city').notNull(),
+});

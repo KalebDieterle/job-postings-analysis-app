@@ -2,132 +2,154 @@
 
 import React, { useMemo, useState } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine,
-  ResponsiveContainer, CartesianGrid, Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+  CartesianGrid,
+  Cell,
 } from "recharts";
 
+// Data structure for the chart points
 interface CompanyData {
   company: string;
   avg_salary: number;
   posting_count?: number;
   employee_count?: number;
+  fortune_rank?: number;
 }
 
+// Component Props
 interface CompanyAvgSalaryGraphProps {
   data: CompanyData[];
-  sizeData?: CompanyData[];
   globalAvg: number;
+  fortuneData: CompanyData[];
 }
 
 export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
   data,
-  sizeData,
   globalAvg,
+  fortuneData,
 }) => {
-  const [viewMode, setViewMode] = useState<'salary' | 'size'>('salary');
+  // Mode restricted to 'salary' (Market) or 'fortune' (Top 10 NW)
+  const [viewMode, setViewMode] = useState<'salary' | 'fortune'>('salary');
 
+  // Process data: Filter out $0 values and sort based on active mode
   const chartData = useMemo(() => {
-    if (viewMode === 'salary') {
-      return [...data]
-        .filter((item) => item.company && item.avg_salary > 0 && item.avg_salary < 600000)
-        .sort((a, b) => b.avg_salary - a.avg_salary)
-        .slice(0, 10);
-    } else {
-      // Use sizeData if provided, otherwise fallback to data
-      const source = (sizeData && sizeData.length > 0) ? sizeData : data;
-      return [...source]
-        .filter((item) => item.company)
-        .sort((a, b) => (b.employee_count ?? 0) - (a.employee_count ?? 0))
-        .slice(0, 10);
-    }
-  }, [data, sizeData, viewMode]);
+    const source = viewMode === 'fortune' ? fortuneData : data;
 
+    return [...source]
+      .filter((item) => item.avg_salary > 0) // Hides companies with no valid salary data
+      .sort((a, b) => 
+        viewMode === 'fortune' 
+          ? (a.fortune_rank ?? 0) - (b.fortune_rank ?? 0) // Rank-based sorting
+          : b.avg_salary - a.avg_salary                   // Value-based sorting
+      );
+  }, [data, viewMode, fortuneData]);
+
+  // Dynamic bar coloring based on market average
   const getBarColor = (salary: number) => {
-    if (salary === 0) return "#475569"; // Slate-600 for companies with no salary data
-    const diffPercent = ((salary - globalAvg) / globalAvg) * 100;
-    if (diffPercent > 20) return "#10b981"; 
-    if (diffPercent > 0) return "#34d399";  
-    return "#fbbf24";                       
+    const diff = ((salary - globalAvg) / globalAvg) * 100;
+    return diff > 0 ? "#10b981" : "#fbbf24"; // Emerald for above avg, Amber for below
   };
 
+  // Custom Tooltip for the dark theme
   const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const item = payload[0].payload;
-      return (
-        <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 shadow-2xl">
-          <p className="font-bold text-white text-sm mb-1">{item.company}</p>
-          <div className="flex flex-col gap-1">
-            <p className="text-emerald-400 text-lg font-extrabold">
-              {item.avg_salary > 0 ? `$${Math.round(item.avg_salary).toLocaleString()}` : 'Salary N/A'}
+    if (!active || !payload?.length) return null;
+    const item = payload[0].payload;
+    
+    return (
+      <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 shadow-2xl">
+        <p className="font-bold text-white text-sm mb-1">{item.company}</p>
+        <div className="space-y-1">
+          <p className="text-emerald-400 text-lg font-bold">
+            ${Math.round(item.avg_salary).toLocaleString()}
+          </p>
+          {item.fortune_rank && (
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">
+              Fortune Rank: #{item.fortune_rank}
             </p>
-            <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-              {(item.employee_count ?? 0).toLocaleString()} Employees
+          )}
+          <div className="pt-1 border-t border-slate-800 mt-1">
+            <p className="text-slate-500 text-[10px] font-medium">
+              {item.employee_count?.toLocaleString() || 'N/A'} Total Employees
             </p>
-            <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-              {(item.posting_count ?? 0).toLocaleString()} Active Postings
+            <p className="text-slate-500 text-[10px] font-medium">
+              {item.posting_count ?? 0} Active Postings Analyzed
             </p>
           </div>
         </div>
-      );
-    }
-    return null;
+      </div>
+    );
   };
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex justify-end mb-4">
-        <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+      {/* View Switcher */}
+      <div className="flex justify-end mb-6">
+        <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 shadow-inner">
           <button
             onClick={() => setViewMode('salary')}
-            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${
-              viewMode === 'salary' ? 'bg-emerald-500 text-white' : 'text-slate-500'
+            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all duration-200 ${
+              viewMode === 'salary' 
+                ? 'bg-emerald-600 text-white shadow-lg' 
+                : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            By Salary
+            Market Salary
           </button>
           <button
-            onClick={() => setViewMode('size')}
-            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${
-              viewMode === 'size' ? 'bg-emerald-500 text-white' : 'text-slate-500'
+            onClick={() => setViewMode('fortune')}
+            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all duration-200 ${
+              viewMode === 'fortune' 
+                ? 'bg-emerald-600 text-white shadow-lg' 
+                : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            By Size
+            Top 10 Companies (NW)
           </button>
         </div>
       </div>
 
+      {/* Chart Canvas */}
       <div className="flex-1 min-h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 60 }}>
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-            <XAxis
-              dataKey="company"
-              tick={{ fontSize: 10, fill: '#64748b' }}
-              angle={-45}
-              textAnchor="end"
-              interval={0}
-              height={80}
+            <XAxis 
+              dataKey="company" 
+              tick={{ fontSize: 10, fill: '#64748b' }} 
+              angle={-45} 
+              textAnchor="end" 
+              interval={0} 
+              height={80} 
             />
-            <YAxis
-              tickFormatter={(val) => viewMode === 'salary' ? `$${val / 1000}k` : (val >= 1000 ? `${val/1000}k` : val)}
+            <YAxis 
+              tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
               tick={{ fontSize: 11, fill: '#64748b' }}
-              width={50}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+            <Tooltip 
+              content={<CustomTooltip />} 
+              cursor={{ fill: 'rgba(255,255,255,0.03)' }} 
+            />
             
-            {viewMode === 'salary' && (
-              <ReferenceLine
-                y={globalAvg}
-                stroke="#ef4444"
-                strokeDasharray="4 4"
-                label={{ value: `Market Avg`, position: "top", fill: '#ef4444', fontSize: 10 }}
-              />
-            )}
+            <ReferenceLine 
+              y={globalAvg} 
+              stroke="#ef4444" 
+              strokeDasharray="4 4" 
+              label={{ 
+                value: 'Market Avg', 
+                position: 'insideBottomRight', 
+                fill: '#ef4444', 
+                fontSize: 10,
+                offset: 10 
+              }} 
+            />
 
-            <Bar 
-              dataKey={viewMode === 'salary' ? "avg_salary" : "employee_count"} 
-              radius={[4, 4, 0, 0]}
-            >
+            <Bar dataKey="avg_salary" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getBarColor(entry.avg_salary)} />
               ))}

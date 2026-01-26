@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { db} from './index';
-import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings, roleAliases } 
+import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings, roleAliases, top_companies } 
 from './schema';
 import { eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull} from 'drizzle-orm'
 
@@ -681,5 +681,64 @@ export async function getTopCompaniesBySize() {
     .from(companySizeCte)
     .crossJoin(globalAvgCte)
     .orderBy(desc(companySizeCte.employee_count)) // Order by size at DB level
+    .limit(10);
+}
+
+
+export async function getAvgSalaryPerEmployeeForTop10Fortune() {
+  const rankedEmployeeCounts = db.$with("ranked_counts").as(
+    db
+      .select({
+        company_id: employee_counts.company_id,
+        employee_count: employee_counts.employee_count,
+        rn: sql<number>`
+          ROW_NUMBER() OVER (
+            PARTITION BY ${employee_counts.company_id}
+            ORDER BY ${employee_counts.time_recorded} DESC
+          )
+        `.as("rn"),
+      })
+      .from(employee_counts)
+  );
+
+  const latestEmployeeCounts = db.$with("latest_counts").as(
+    db
+      .select({
+        company_id: rankedEmployeeCounts.company_id,
+        employee_count: sql<number>`CAST(${rankedEmployeeCounts.employee_count} AS INTEGER)`.as("employee_count"),
+      })
+      .from(rankedEmployeeCounts)
+      .where(eq(rankedEmployeeCounts.rn, 1))
+  );
+
+  return await db
+    .with(rankedEmployeeCounts, latestEmployeeCounts)
+    .select({
+      company: top_companies.name,
+      fortune_rank: top_companies.fortune_rank,
+      // Actual average salary, no longer divided by employee count
+      avg_salary: sql<number>`
+        COALESCE(AVG(
+          CAST(
+            NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') 
+          AS NUMERIC)
+        ), 0)
+      `.mapWith(Number), 
+      employee_count: sql<number>`COALESCE(${latestEmployeeCounts.employee_count}, 0)`.mapWith(Number),
+      posting_count: sql<number>`COUNT(${postings.job_id})`.mapWith(Number),
+    })
+    .from(top_companies)
+    .innerJoin(companies, eq(top_companies.name, companies.name))
+    .leftJoin(
+      latestEmployeeCounts,
+      eq(companies.company_id, latestEmployeeCounts.company_id)
+    )
+    .leftJoin(postings, eq(companies.name, postings.company_name))
+    .groupBy(
+      top_companies.name,
+      top_companies.fortune_rank,
+      latestEmployeeCounts.employee_count
+    )
+    .orderBy(top_companies.fortune_rank)
     .limit(10);
 }
