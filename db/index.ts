@@ -3,11 +3,10 @@ import { neon } from "@neondatabase/serverless";
 import { config } from "dotenv";
 import path from "path";
 
-// Load .env.local from project root
-config({ path: path.resolve(process.cwd(), ".env.local") });
-
-// Debug: Check if env var is loaded
-console.log("DATABASE_URL loaded:", !!process.env.DATABASE_URL);
+// Load .env.local from project root on server
+if (typeof window === "undefined") {
+  config({ path: path.resolve(process.cwd(), ".env.local") });
+}
 
 if (!process.env.DATABASE_URL) {
   throw new Error(

@@ -3,6 +3,7 @@ import { db} from './index';
 import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings, roleAliases, top_companies } 
 from './schema';
 import { eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull} from 'drizzle-orm'
+import { slugify } from '@/lib/slugify';
 
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
@@ -742,3 +743,171 @@ export async function getAvgSalaryPerEmployeeForTop10Fortune() {
     .orderBy(top_companies.fortune_rank)
     .limit(10);
 }
+
+
+export async function getCompanyBySlug(slug: string) {
+  if (!slug) throw new Error("Slug is required");
+
+  const result = await db
+    .select()
+    .from(companies)
+    .where(
+      sql`lower(regexp_replace(${companies.name}, '[^a-z0-9]', '', 'gi')) = lower(regexp_replace(${slug}, '[^a-z0-9]', '', 'gi'))`
+    )
+    .limit(1);
+
+  return result[0] || null;
+}
+
+
+export async function getCompanyJobStats(companyName: string) {
+  const result = await db
+    .select({
+      total_postings: sql<number>`COUNT(*)::int`,
+      active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
+      avg_salary: sql<number>`COALESCE(AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC)), 0)`,
+      remote_count: sql<number>`COUNT(CASE WHEN ${postings.remote_allowed}::text = '1' OR LOWER(${postings.remote_allowed}) = 'true' THEN 1 END)::int`,
+    })
+    .from(postings)
+    .where(eq(postings.company_name, companyName)); // Use exact match if possible
+
+  return result[0];
+}
+
+export async function getCompanyTopRoles(companyName: string, limit = 10) {
+  const results = await db
+    .select({
+      title: sql<string>`COALESCE(${roleAliases.canonical_name}, ${postings.title})`,
+      count: sql<number>`COUNT(*)::int`,
+      avg_salary: sql<number>`AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))`,
+    })
+    .from(postings)
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
+    .where(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`)
+    .groupBy(sql`COALESCE(${roleAliases.canonical_name}, ${postings.title})`)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(limit);
+
+  return results;
+}
+
+export async function getCompanyTopSkills(companyName: string, limit = 15) {
+  const results = await db
+    .select({
+      skill_name: skills.skill_name,
+      skill_abr: skills.skill_abr,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .innerJoin(job_skills, eq(postings.job_id, job_skills.job_id))
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .where(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`)
+    .groupBy(skills.skill_name, skills.skill_abr)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(limit);
+
+  return results;
+}
+
+export async function getCompanyPostingsTimeSeries(companyName: string) {
+  const result = await db.execute<{
+    month: string;
+    count: number;
+  }>(sql`
+    SELECT 
+      TO_CHAR(DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000)), 'YYYY-MM') as month,
+      COUNT(*)::int as count
+    FROM ${postings}
+    WHERE LOWER(company_name) = LOWER(${companyName})
+    GROUP BY DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000))
+    ORDER BY month ASC
+  `);
+
+  return result.rows;
+}
+
+export async function getCompanyLocationDistribution(companyName: string) {
+  const results = await db
+    .select({
+      location: postings.location,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .where(
+      and(
+        sql`LOWER(${postings.company_name}) = LOWER(${companyName})`,
+        isNotNull(postings.location),
+        not(eq(postings.location, ''))
+      )
+    )
+    .groupBy(postings.location)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(10);
+
+  return results;
+}
+
+export async function getCompanyExperienceLevels(companyName: string) {
+  const results = await db
+    .select({
+      experience_level: postings.formatted_experience_level,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .where(
+      and(
+        sql`LOWER(${postings.company_name}) = LOWER(${companyName})`,
+        isNotNull(postings.formatted_experience_level)
+      )
+    )
+    .groupBy(postings.formatted_experience_level)
+    .orderBy(desc(sql`COUNT(*)`));
+
+  return results;
+}
+
+export async function getCompanySalaryDistribution(companyName: string) {
+  const results = await db.execute<{
+    salary_range: string;
+    count: number;
+  }>(sql`
+    SELECT 
+      CASE 
+        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 50000 THEN 'Under $50k'
+        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 75000 THEN '$50k-$75k'
+        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 100000 THEN '$75k-$100k'
+        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 150000 THEN '$100k-$150k'
+        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 200000 THEN '$150k-$200k'
+        ELSE 'Over $200k'
+      END as salary_range,
+      COUNT(*)::int as count
+    FROM ${postings}
+    WHERE LOWER(company_name) = LOWER(${companyName})
+      AND min_salary IS NOT NULL 
+      AND min_salary != ''
+    GROUP BY salary_range
+    ORDER BY MIN(CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC))
+  `);
+
+  return results.rows;
+}
+
+export async function getCompanyRecentPostings(companyName: string, limit = 10) {
+  const results = await db
+    .select({
+      job_id: postings.job_id,
+      title: postings.title,
+      location: postings.location,
+      min_salary: postings.min_salary,
+      max_salary: postings.max_salary,
+      listed_time: postings.listed_time,
+      remote_allowed: postings.remote_allowed,
+      formatted_experience_level: postings.formatted_experience_level,
+    })
+    .from(postings)
+    .where(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`)
+    .orderBy(desc(postings.listed_time))
+    .limit(limit);
+
+  return results;
+  }
