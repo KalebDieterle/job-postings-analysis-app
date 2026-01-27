@@ -27,34 +27,44 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
   const limit = 50;
   const offset = (page - 1) * limit;
 
-  const [companiesRaw, salaryResults, sizeResults, fortuneResults] = await Promise.all([
-    getAllCompanyData({
-      limit,
-      offset,
-      search: filters.q,
-      location: filters.location,
-    }),
-    getAverageCompanySalary(),
-    getTopCompaniesBySize(),
-    getAvgSalaryPerEmployeeForTop10Fortune(),
-  ]);
+  const [companiesRaw, salaryResults, sizeResults, fortuneResults] =
+    await Promise.all([
+      getAllCompanyData({
+        limit,
+        offset,
+        search: filters.q,
+        location: filters.location,
+      }),
+      getAverageCompanySalary(),
+      getTopCompaniesBySize(),
+      getAvgSalaryPerEmployeeForTop10Fortune(),
+    ]);
 
-  // Normalize data for the Client boundary
-  const companies = companiesRaw.map((company) => ({
-    ...company,
-    postings_count: Number(company.postings_count ?? 0),
-    company_size: company.company_size?.toString() || "N/A",
-  }));
-
-  const salaryData = salaryResults
-    .slice(0, 10)
-    .map((row) => ({
-      company: row.company,
-      avg_salary: Number(row.avg_salary ?? 0),
-      posting_count: Number(row.posting_count ?? 0),
+  // Normalize data for the Client boundary and filter out generic "Confidential" entries
+  const companies = companiesRaw
+    .filter((company) => {
+      const name = company.name?.toLowerCase() || "";
+      // Filter out generic "Confidential" entries but keep legitimate companies like "Confidential Jobs"
+      return !(
+        name === "confidential" ||
+        name === "confidential company" ||
+        name.startsWith("confidential (") ||
+        name.includes("eox vantage")
+      );
+    })
+    .map((company) => ({
+      ...company,
+      postings_count: Number(company.postings_count ?? 0),
+      company_size: company.company_size?.toString() || "N/A",
     }));
 
-  // Note: sizeResults is kept here in case you need it for cards, 
+  const salaryData = salaryResults.slice(0, 10).map((row) => ({
+    company: row.company,
+    avg_salary: Number(row.avg_salary ?? 0),
+    posting_count: Number(row.posting_count ?? 0),
+  }));
+
+  // Note: sizeResults is kept here in case you need it for cards,
   // but it's no longer passed to the chart below.
   const fortuneData = fortuneResults.map((row) => ({
     company: row.company,
@@ -82,7 +92,11 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
       <h1 className="text-3xl font-bold">Company Explorer</h1>
       <FilterBar />
 
-      <Suspense fallback={<div className="h-32 bg-slate-900 animate-pulse rounded-xl" />}>
+      <Suspense
+        fallback={
+          <div className="h-32 bg-slate-900 animate-pulse rounded-xl" />
+        }
+      >
         <CompanyOverview />
       </Suspense>
 
@@ -127,13 +141,21 @@ const CompaniesPage = async ({ searchParams }: PageProps) => {
 
       <div className="flex items-center justify-center gap-2 mt-8">
         {hasPrevPage && (
-          <Link href={buildPageUrl(page - 1)} className="px-4 py-2 rounded-md border bg-card hover:bg-muted transition-colors flex items-center gap-2">
+          <Link
+            href={buildPageUrl(page - 1)}
+            className="px-4 py-2 rounded-md border bg-card hover:bg-muted transition-colors flex items-center gap-2"
+          >
             <ChevronLeft className="h-4 w-4" /> Previous
           </Link>
         )}
-        <span className="px-4 py-2 text-sm text-muted-foreground">Page {page}</span>
+        <span className="px-4 py-2 text-sm text-muted-foreground">
+          Page {page}
+        </span>
         {hasNextPage && (
-          <Link href={buildPageUrl(page + 1)} className="px-4 py-2 rounded-md border bg-card hover:bg-muted transition-colors flex items-center gap-2">
+          <Link
+            href={buildPageUrl(page + 1)}
+            className="px-4 py-2 rounded-md border bg-card hover:bg-muted transition-colors flex items-center gap-2"
+          >
             Next <ChevronRight className="h-4 w-4" />
           </Link>
         )}

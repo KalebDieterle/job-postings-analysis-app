@@ -33,7 +33,9 @@ export function CompanyCard({
           {name}
         </span>
         <span className="text-xs text-muted-foreground">
-          {size ? `Employees: ${size}` : null}
+          {size && size !== "N/A"
+            ? `Employees: ${Number(size).toLocaleString()}`
+            : null}
         </span>
       </div>
       <div className="flex items-end justify-between mt-auto">

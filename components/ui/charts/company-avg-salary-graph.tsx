@@ -35,18 +35,20 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
   fortuneData,
 }) => {
   // Mode restricted to 'salary' (Market) or 'fortune' (Top 10 NW)
-  const [viewMode, setViewMode] = useState<'salary' | 'fortune'>('salary');
+  const [viewMode, setViewMode] = useState<"salary" | "fortune">("fortune");
 
-  // Process data: Filter out $0 values and sort based on active mode
+  // Process data: Filter out $0 values, EOX Vantage, and sort based on active mode
   const chartData = useMemo(() => {
-    const source = viewMode === 'fortune' ? fortuneData : data;
+    const source = viewMode === "fortune" ? fortuneData : data;
 
     return [...source]
       .filter((item) => item.avg_salary > 0) // Hides companies with no valid salary data
-      .sort((a, b) => 
-        viewMode === 'fortune' 
-          ? (a.fortune_rank ?? 0) - (b.fortune_rank ?? 0) // Rank-based sorting
-          : b.avg_salary - a.avg_salary                   // Value-based sorting
+      .filter((item) => !item.company.toLowerCase().includes("eox vantage")) // Filter out EOX Vantage
+      .sort(
+        (a, b) =>
+          viewMode === "fortune"
+            ? (a.fortune_rank ?? 0) - (b.fortune_rank ?? 0) // Rank-based sorting
+            : b.avg_salary - a.avg_salary, // Value-based sorting
       );
   }, [data, viewMode, fortuneData]);
 
@@ -60,7 +62,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.length) return null;
     const item = payload[0].payload;
-    
+
     return (
       <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 shadow-2xl">
         <p className="font-bold text-white text-sm mb-1">{item.company}</p>
@@ -75,7 +77,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
           )}
           <div className="pt-1 border-t border-slate-800 mt-1">
             <p className="text-slate-500 text-[10px] font-medium">
-              {item.employee_count?.toLocaleString() || 'N/A'} Total Employees
+              {item.employee_count?.toLocaleString() || "N/A"} Total Employees
             </p>
             <p className="text-slate-500 text-[10px] font-medium">
               {item.posting_count ?? 0} Active Postings Analyzed
@@ -92,68 +94,80 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
       <div className="flex justify-end mb-6">
         <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 shadow-inner">
           <button
-            onClick={() => setViewMode('salary')}
+            onClick={() => setViewMode("fortune")}
             className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all duration-200 ${
-              viewMode === 'salary' 
-                ? 'bg-emerald-600 text-white shadow-lg' 
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            Market Salary
-          </button>
-          <button
-            onClick={() => setViewMode('fortune')}
-            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all duration-200 ${
-              viewMode === 'fortune' 
-                ? 'bg-emerald-600 text-white shadow-lg' 
-                : 'text-slate-500 hover:text-slate-300'
+              viewMode === "fortune"
+                ? "bg-emerald-600 text-white shadow-lg"
+                : "text-slate-500 hover:text-slate-300"
             }`}
           >
             Top 10 Companies (NW)
+          </button>
+          <button
+            onClick={() => setViewMode("salary")}
+            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all duration-200 ${
+              viewMode === "salary"
+                ? "bg-emerald-600 text-white shadow-lg"
+                : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            Highest Avg Salary
           </button>
         </div>
       </div>
 
       {/* Chart Canvas */}
-      <div className="flex-1 min-h-[350px]">
+      <div className="h-[500px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-            <XAxis 
-              dataKey="company" 
-              tick={{ fontSize: 10, fill: '#64748b' }} 
-              angle={-45} 
-              textAnchor="end" 
-              interval={0} 
-              height={80} 
+          <BarChart
+            data={chartData}
+            margin={{ top: 10, right: 10, left: 0, bottom: 60 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="#1e293b"
+              vertical={false}
             />
-            <YAxis 
+            <XAxis
+              dataKey="company"
+              tick={{ fontSize: 10, fill: "#64748b" }}
+              angle={-45}
+              textAnchor="end"
+              interval={0}
+              height={80}
+            />
+            <YAxis
               tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
-              tick={{ fontSize: 11, fill: '#64748b' }}
+              tick={{ fontSize: 11, fill: "#64748b" }}
             />
-            <Tooltip 
-              content={<CustomTooltip />} 
-              cursor={{ fill: 'rgba(255,255,255,0.03)' }} 
-            />
-            
-            <ReferenceLine 
-              y={globalAvg} 
-              stroke="#ef4444" 
-              strokeDasharray="4 4" 
-              label={{ 
-                value: 'Market Avg', 
-                position: 'insideBottomRight', 
-                fill: '#ef4444', 
-                fontSize: 10,
-                offset: 10 
-              }} 
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ fill: "rgba(255,255,255,0.03)" }}
             />
 
             <Bar dataKey="avg_salary" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry.avg_salary)} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={getBarColor(entry.avg_salary)}
+                />
               ))}
             </Bar>
+
+            <ReferenceLine
+              y={globalAvg}
+              stroke="#ef4444"
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              label={{
+                value: "Market Avg",
+                position: "insideBottomRight",
+                fill: "#ef4444",
+                fontSize: 10,
+                offset: 10,
+              }}
+              ifOverflow="extendDomain"
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
