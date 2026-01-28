@@ -88,7 +88,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-linear-to-r from-primary to-secondary">
           Company Explorer
         </h1>
         <div className="hidden sm:block w-full max-w-2xl">

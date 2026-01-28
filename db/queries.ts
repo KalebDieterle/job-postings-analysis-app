@@ -648,9 +648,10 @@ export async function getTopCompaniesBySize() {
         company: companies.name,
         employee_count: employee_counts.employee_count,
         avg_salary: sql<number>`
-          COALESCE(
-            AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC)), 
-            0
+          AVG(
+            CAST(
+              NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '')
+            AS NUMERIC)
           )
         `.as("avg_salary"),
         posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
@@ -719,11 +720,11 @@ export async function getAvgSalaryPerEmployeeForTop10Fortune() {
       fortune_rank: top_companies.fortune_rank,
       // Actual average salary, no longer divided by employee count
       avg_salary: sql<number>`
-        COALESCE(AVG(
+        AVG(
           CAST(
             NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') 
           AS NUMERIC)
-        ), 0)
+        )
       `.mapWith(Number), 
       employee_count: sql<number>`COALESCE(${latestEmployeeCounts.employee_count}, 0)`.mapWith(Number),
       posting_count: sql<number>`COUNT(${postings.job_id})`.mapWith(Number),
@@ -765,8 +766,12 @@ export async function getCompanyJobStats(companyName: string) {
     .select({
       total_postings: sql<number>`COUNT(*)::int`,
       active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
-      avg_salary: sql<number>`COALESCE(AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC)), 0)`,
-      remote_count: sql<number>`COUNT(CASE WHEN ${postings.remote_allowed}::text = '1' OR LOWER(${postings.remote_allowed}) = 'true' THEN 1 END)::int`,
+      avg_salary: sql<number>`AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))`,
+      remote_count: sql<number>`
+        SUM(
+          CASE WHEN LOWER(CAST(${postings.remote_allowed} AS TEXT)) ~ '^(1(\\.0+)?|true|t)$' THEN 1 ELSE 0 END
+        )::int
+      `,
     })
     .from(postings)
     .where(eq(postings.company_name, companyName)); // Use exact match if possible

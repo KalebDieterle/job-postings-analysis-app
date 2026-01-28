@@ -65,18 +65,30 @@ export default async function CompanySlugPage({ params }: PageProps) {
   const topSkills = await getCompanyTopSkills(company.name);
   const recentJobs = await getCompanyRecentPostings(company.name);
 
+  // Cast some DB results to `any` for optional display fields not present in schema
+  const companyAny = company as any;
+  const jobStatsAny = jobStats as any;
+
+  // Compute remote percentage for display (show N/A when totals missing)
+  const remotePercent = jobStats.total_postings
+    ? Math.round(
+        (Number(jobStats.remote_count ?? 0) / Number(jobStats.total_postings)) *
+          100,
+      )
+    : null;
+
   return (
     <div className="min-h-screen bg-slate-950 text-white py-8">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Hero */}
-        <section className="relative overflow-hidden rounded-xl glass-card min-h-[220px] p-8 flex items-end">
+        <section className="relative overflow-hidden rounded-xl glass-card min-h-55 p-8 flex items-end">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
               <span className="bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">
-                {company.fortune_rank ? "Fortune 500" : "Company"}
+                {companyAny.fortune_rank ? "Fortune 500" : "Company"}
               </span>
               <span className="text-sm text-slate-300">
-                {company.headline || "Company Intelligence Profile"}
+                {companyAny.headline || "Company Intelligence Profile"}
               </span>
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight">
@@ -92,13 +104,13 @@ export default async function CompanySlugPage({ params }: PageProps) {
               <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
                 <Globe className="h-4 w-4 text-primary" />
                 <span className="text-sm">
-                  {company.industry || "Industry"}
+                  {companyAny.industry || "Industry"}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="ml-6 flex-shrink-0">
+          <div className="ml-6 shrink-0">
             {company.url && (
               <Button asChild className="rounded-xl px-5 py-3">
                 <a
@@ -128,7 +140,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
                 {jobStats.total_postings}
               </div>
               <div className="text-sm text-emerald-400 mt-1">
-                {jobStats.postings_change_pct ?? "+0%"}%
+                {jobStatsAny.postings_change_pct ?? "+0%"}%
               </div>
             </CardContent>
           </Card>
@@ -155,7 +167,9 @@ export default async function CompanySlugPage({ params }: PageProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-primary">
-                ${Number(jobStats.avg_salary || 0).toLocaleString()}
+                {jobStats.avg_salary
+                  ? `$${Number(jobStats.avg_salary).toLocaleString()}`
+                  : "N/A"}
               </div>
               <div className="text-sm text-emerald-400 mt-1">
                 Median / Benchmark
@@ -169,7 +183,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {jobStats.remote_pct ?? "N/A"}%
+                {remotePercent !== null ? `${remotePercent}%` : "N/A"}
               </div>
               <div className="text-sm text-emerald-400 mt-1">
                 Remote-friendly roles
@@ -215,7 +229,9 @@ export default async function CompanySlugPage({ params }: PageProps) {
                         {role.count}
                       </td>
                       <td className="px-6 py-4 text-sm text-right text-slate-300">
-                        ${Number(role.avg_salary || 0).toLocaleString()}
+                        {role.avg_salary
+                          ? `$${Number(role.avg_salary).toLocaleString()}`
+                          : "N/A"}
                       </td>
                     </tr>
                   ))}
@@ -281,7 +297,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
                       <div className="flex flex-col">
                         <span className="text-sm font-bold">{job.title}</span>
                         <span className="text-xs text-muted-foreground">
-                          {job.department || ""}
+                          {(job as any).department || ""}
                         </span>
                       </div>
                     </td>
@@ -306,7 +322,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
                       <span
                         className={`inline-flex items-center gap-2 text-xs font-semibold ${job.remote_allowed ? "text-emerald-400" : "text-amber-400"}`}
                       >
-                        {job.status || "Active"}
+                        {(job as any).status || "Active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
