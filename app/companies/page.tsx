@@ -18,12 +18,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-console.log("IndustryRadarChart:", IndustryRadarChart);
-console.log("CompanyAvgSalaryGraph:", CompanyAvgSalaryGraph);
-console.log("CompanyOverview:", CompanyOverview);
-console.log("CompanyCard:", CompanyCard);
-console.log("FilterBar:", FilterBar);
-
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
@@ -93,19 +87,42 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Company Explorer</h1>
-      <FilterBar />
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+          Company Explorer
+        </h1>
+        <div className="hidden sm:block w-full max-w-2xl">
+          <FilterBar />
+        </div>
+      </div>
 
       <Suspense
-        fallback={
-          <div className="h-32 bg-slate-900 animate-pulse rounded-xl" />
-        }
+        fallback={<div className="h-28 rounded-xl bg-muted animate-pulse" />}
       >
         <CompanyOverview />
       </Suspense>
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-        <div className="col-span-2 rounded-xl border bg-card p-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-bold">Avg Salary Benchmarks</h3>
+              <p className="text-sm text-muted-foreground">
+                Top companies by average salary
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-primary">
+                $
+                {globalAvg.toLocaleString(undefined, {
+                  maximumFractionDigits: 0,
+                })}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Global average
+              </div>
+            </div>
+          </div>
           <CompanyAvgSalaryGraph
             data={salaryData}
             globalAvg={globalAvg}
@@ -113,50 +130,65 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
           />
         </div>
 
-        <div className="col-span-3 rounded-xl border bg-card p-4">
-          <IndustryRadarChart />
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-bold">Market Concentration</h3>
+              <p className="text-sm text-muted-foreground">
+                Industry distribution across segments
+              </p>
+            </div>
+            <div className="text-xs text-muted-foreground">Live</div>
+          </div>
+          <div className="h-64">
+            <IndustryRadarChart />
+          </div>
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Showing {offset + 1}–{offset + companies.length} companies
-      </p>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Top Companies</h2>
+        <p className="text-sm text-muted-foreground">
+          Showing {offset + 1}–{offset + companies.length} of many
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
         {companies.map((company: any, index: number) => (
           <Link
             key={`${company.name}-${offset + index}`}
             href={`/companies/${company.slug}`}
+            className="group"
           >
-            <CompanyCard
-              name={company.name || "N/A"}
-              size={company.company_size}
-              country={company.country || "N/A"}
-              rank={offset + index + 1}
-              count={company.postings_count}
-            />
+            <div className="rounded-2xl border bg-card p-4 hover:shadow-lg transition-shadow h-full">
+              <CompanyCard
+                name={company.name || "N/A"}
+                size={company.company_size}
+                country={company.country || "N/A"}
+                rank={offset + index + 1}
+                count={company.postings_count}
+              />
+            </div>
           </Link>
         ))}
       </div>
 
-      <div className="flex items-center justify-center gap-2 mt-8">
+      <div className="flex items-center justify-center gap-3 mt-6">
         {hasPrevPage && (
           <Link
             href={buildPageUrl(page - 1)}
-            className="px-4 py-2 rounded-md border"
+            className="px-3 py-2 rounded-md border"
           >
-            <ChevronLeft className="h-4 w-4" /> Previous
+            <ChevronLeft className="h-4 w-4 inline" />
           </Link>
         )}
-        <span className="px-4 py-2 text-sm text-muted-foreground">
-          Page {page}
-        </span>
+        <span className="px-4 py-2 text-sm">Page {page}</span>
         {hasNextPage && (
           <Link
             href={buildPageUrl(page + 1)}
-            className="px-4 py-2 rounded-md border"
+            className="px-3 py-2 rounded-md border"
           >
-            Next <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4 inline" />
           </Link>
         )}
       </div>
