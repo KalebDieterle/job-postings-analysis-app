@@ -117,7 +117,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
       </div>
 
       {/* Chart Canvas */}
-      <div className="h-[500px]">
+      <div className="h-125">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}

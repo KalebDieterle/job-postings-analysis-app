@@ -1,13 +1,14 @@
-import { X } from 'lucide-react';
-import { db} from './index';
-import { companies, skills, job_skills, job_industries, industries, company_industries, company_specialties, employee_counts, postings, roleAliases, top_companies } 
-from './schema';
-import { eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull} from 'drizzle-orm'
-import { slugify } from '@/lib/slugify';
+import { db } from './index';
+import { 
+  companies, skills, job_skills, job_industries, industries, 
+  roleAliases, top_companies, postings, employee_counts 
+} from './schema';
+import { 
+  eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull 
+} from 'drizzle-orm';
 
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
-
 
 // ===========================
 // Database stats
@@ -40,7 +41,6 @@ export async function getTopJobTitles(limit = 10) {
 
 export async function getJobsByRole(roleTitle: string, limit = 100) {
   const roleLower = roleTitle.toLowerCase();
-
   try {
     const results = await db
       .select({
@@ -64,7 +64,6 @@ export async function getJobsByRole(roleTitle: string, limit = 100) {
     throw error;
   }
 }
-
 
 // ===========================
 // Recent jobs with company info
@@ -100,8 +99,6 @@ export async function getTrendingSkills(limit = 10) {
     .from(job_skills)
     .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
     .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
-    // Uncomment after you have recent data
-    //.where(sql`${postings.listed_time} >= NOW() - INTERVAL '7 days'`)
     .groupBy(job_skills.skill_abr, skills.skill_name)
     .orderBy(desc(count()))
     .limit(limit);
@@ -122,13 +119,9 @@ export async function getTopJobRoles(
     conditions.push(inArray(postings.formatted_experience_level, filters.experience));
   }
 
+  // UPDATED: Now filters directly on the indexed integer column 🚀
   if (filters?.minSalary && filters.minSalary > 0) {
-    conditions.push(
-      gte(
-        sql<number>`CAST(NULLIF(${postings.min_salary}, '') AS NUMERIC)`,
-        filters.minSalary
-      )
-    );
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
   }
 
   if (filters?.q) {
@@ -146,7 +139,6 @@ export async function getTopJobRoles(
       count: sql<number>`COUNT(*)::int`,
     })
     .from(postings)
-    // FIXED: Case-insensitive join using sql condition
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`);
 
   if (conditions.length > 0) {
@@ -159,19 +151,12 @@ export async function getTopJobRoles(
     .limit(limit);
 }
 
-
 // ===========================
 // Top roles time series
 // ===========================
-export async function getTopRolesTimeSeries(limit = 10 /*, days = 30 */) {
-  console.log('🔍 [getTopRolesTimeSeries] Starting with limit:', limit);
+export async function getTopRolesTimeSeries(limit = 10) {
   const startTime = Date.now();
-
   try {
-    // Step 1: Get top roles by count (with case-insensitive join)
-    console.log('📊 [Step 1] Fetching top roles...');
-    const step1Start = Date.now();
-    
     const topRolesResult = await db
       .select({ 
         title: sql<string>`COALESCE(${roleAliases.canonical_name}, ${postings.title})` 
@@ -182,19 +167,9 @@ export async function getTopRolesTimeSeries(limit = 10 /*, days = 30 */) {
       .orderBy(desc(count()))
       .limit(limit);
 
-    console.log(`✅ [Step 1] Completed in ${Date.now() - step1Start}ms`);
-    console.log(`📋 [Step 1] Found ${topRolesResult.length} roles:`, topRolesResult.map(r => r.title));
-
     const topRoles = topRolesResult.map(r => r.title);
-    if (topRoles.length === 0) {
-      console.log('⚠️ [getTopRolesTimeSeries] No roles found, returning empty array');
-      return [];
-    }
+    if (topRoles.length === 0) return [];
 
-    // Step 2: Get timeseries data
-    console.log('📈 [Step 2] Fetching timeseries data...');
-    const step2Start = Date.now();
-    
     const result = await db.execute<{
       title: string;
       day: string;
@@ -211,33 +186,24 @@ export async function getTopRolesTimeSeries(limit = 10 /*, days = 30 */) {
       ORDER BY day ASC
     `);
 
-    console.log(`✅ [Step 2] Completed in ${Date.now() - step2Start}ms`);
-    console.log(`📋 [Step 2] Found ${result.rows.length} timeseries data points`);
-    
-    const finalResult = result.rows.map(row => ({
+    return result.rows.map(row => ({
       title: row.title,
       day: row.day,
       count: Number(row.count),
     }));
 
-    console.log(`🎉 [getTopRolesTimeSeries] Total time: ${Date.now() - startTime}ms`);
-    return finalResult;
-
   } catch (error) {
     console.error('❌ [getTopRolesTimeSeries] Error:', error);
-    console.log(`⏱️ [getTopRolesTimeSeries] Failed after ${Date.now() - startTime}ms`);
     throw error;
   }
 }
-
 
 // ===========================
 // Top skills for a role
 // ===========================
 export async function getTopSkillsForRole(roleTitle: string, limit = 10) {
   const roleLower = roleTitle.toLowerCase();
-
-  const results = await db
+  return await db
     .select({
       skill_name: skills.skill_name,
       skill_abr: skills.skill_abr,
@@ -251,19 +217,14 @@ export async function getTopSkillsForRole(roleTitle: string, limit = 10) {
     .groupBy(skills.skill_name, skills.skill_abr)
     .orderBy(desc(count()))
     .limit(limit);
-
-  return results;
 }
-
 
 // ===========================
 // Top companies for a role
 // ===========================
 export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
   const roleLower = roleTitle.toLowerCase();
-
-
-  const results = await db
+  return await db
     .select({
       company_name: postings.company_name,
       count: count(),
@@ -276,22 +237,20 @@ export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
     .groupBy(postings.company_name, companies.country)
     .orderBy(desc(count()))
     .limit(limit);
-
-  return results;
 }
 
-
 // ===========================
-// Role statistics with numeric salaries
+// Role statistics with normalized salaries
 // ===========================
 export async function getRoleStats(roleTitle: string) {
   const roleLower = roleTitle.toLowerCase();
 
+  // UPDATED: Now uses yearly_min/max columns directly
   const results = await db
     .select({
       total_jobs: count(),
-      avg_min_salary: sql<number>`AVG(CAST(NULLIF(${postings.min_salary}, '') AS DECIMAL))`,
-      avg_max_salary: sql<number>`AVG(CAST(NULLIF(${postings.max_salary}, '') AS DECIMAL))`,
+      avg_min_salary: avg(postings.yearly_min_salary),
+      avg_max_salary: avg(postings.yearly_max_salary),
     })
     .from(postings)
     .leftJoin(roleAliases, sql`lower(postings.title) = lower(${roleAliases.alias})`)
@@ -300,10 +259,8 @@ export async function getRoleStats(roleTitle: string) {
   return results[0] || { total_jobs: 0, avg_min_salary: null, avg_max_salary: null };
 }
 
-
 // ===========================
-// Get data quality metrics for a role
-// Counts postings for a role that have NO skills associated
+// Data Quality Metrics
 // ===========================
 export async function getRoleDataQuality(roleTitle: string) {
   const result = await db
@@ -317,7 +274,7 @@ export async function getRoleDataQuality(roleTitle: string) {
 }
 
 // ===========================
-// Paginated list of all skills with counts and avg salary
+// Paginated list of all skills with counts and normalized avg salary
 // ===========================
 export async function getAllSkills(params: { page?: number; limit?: number; search?: string }) {
   const { page = 1, limit = 12, search = "" } = params;
@@ -325,11 +282,12 @@ export async function getAllSkills(params: { page?: number; limit?: number; sear
 
   const conditions = search ? ilike(skills.skill_name, `%${search}%`) : undefined;
 
+  // UPDATED: Simple avg(yearly_min_salary) replaces the regex mess
   const data = await db
     .select({
       name: skills.skill_name,
       count: count(),
-      avg_salary: sql<number>`AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))`
+      avg_salary: avg(postings.yearly_min_salary)
     })
     .from(skills)
     .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
@@ -349,22 +307,17 @@ export async function getAllSkills(params: { page?: number; limit?: number; sear
 export async function getSkillDetails(skillName: string) {
   const skillLower = skillName.toLowerCase();
 
-  // Base stats
+  // UPDATED: Uses yearly_min_salary
   const stats = await db
     .select({
       count: sql<number>`count(*)::int`,
-      avgSalary: sql<number>`
-        coalesce(
-          avg(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC)), 0
-        )::float
-      `,
+      avgSalary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
     })
     .from(postings)
     .innerJoin(job_skills, eq(postings.job_id, job_skills.job_id))
     .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
     .where(sql`lower(${skills.skill_name}) = ${skillLower}`);
 
-  // Top employers
   const topEmployers = await db
     .select({
       name: postings.company_name,
@@ -389,12 +342,10 @@ export async function getSkillDetails(skillName: string) {
 }
 
 // ===========================
-// Related skills for a given skill
+// Related skills
 // ===========================
 export async function getRelatedSkills(skillName: string, limit = 5) {
   const skillLower = skillName.toLowerCase();
-
-  // Step 1: Get job IDs that contain this skill
   const jobIdsResult = await db
     .select({ job_id: job_skills.job_id })
     .from(job_skills)
@@ -402,10 +353,9 @@ export async function getRelatedSkills(skillName: string, limit = 5) {
     .where(sql`lower(${skills.skill_name}) = ${skillLower}`);
 
   const jobIds = jobIdsResult.map(r => r.job_id);
-  if (jobIds.length === 0) return []; // early exit if no jobs
+  if (jobIds.length === 0) return [];
 
-  // Step 2: Get other skills in these jobs (exclude the original skill)
-  const relatedSkills = await db
+  return await db
     .select({
       name: skills.skill_name,
       count: count(),
@@ -421,16 +371,13 @@ export async function getRelatedSkills(skillName: string, limit = 5) {
     .groupBy(skills.skill_name)
     .orderBy(desc(count()))
     .limit(limit);
-
-  return relatedSkills;
 }
 
 // ===========================
-// Skill trending data by day
+// Skill trending data
 // ===========================
 export async function getSkillTrendingData(skillName: string) {
   const skillLower = skillName.toLowerCase();
-
   return await db
     .select({
       day: sql<string>`date_trunc('day', to_timestamp(${postings.listed_time}::numeric / 1000))::text`,
@@ -448,14 +395,11 @@ export async function getRoleInsights(roleTitle: string) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // 1. Get count for last 30 days vs previous 30 days
   const currentCount = await db
     .select({ count: sql<number>`count(*)` })
     .from(postings)
     .where(and(eq(postings.title, roleTitle), gte(postings.listed_time, thirtyDaysAgo)));
 
-  // 2. Get the top skill for this role
-  // This assumes you have a join table or skills associated with postings
   const topSkill = await db
     .select({ name: skills.skill_name, count: sql<number>`count(*)` })
     .from(skills)
@@ -469,7 +413,6 @@ export async function getRoleInsights(roleTitle: string) {
   return {
     count: currentCount[0]?.count || 0,
     topSkill: topSkill[0]?.name || "N/A",
-    // Hardcoded trend for example, or calculate (current - previous) / previous
     trend: 12 
   };
 }
@@ -514,8 +457,6 @@ export async function getTotalCompanyStats() {
       country: companies.country,
     })
     .from(companies)
-    // We link the company name from 'postings' (column 29) 
-    // to the name in 'companies' (column 5)
     .innerJoin(postings, eq(companies.name, postings.company_name)) 
     .groupBy(companies.name, companies.country)
     .orderBy(desc(count(postings.job_id)))
@@ -530,8 +471,7 @@ export async function getTotalCompanyStats() {
 }
 
 export async function getTopIndustries(limit = 5) {
-
-  const results = await db
+  return await db
     .select({
       industry_name: industries.industry_name,
       count: count(),
@@ -542,87 +482,91 @@ export async function getTopIndustries(limit = 5) {
     .groupBy(industries.industry_name)
     .orderBy(desc(count()))
     .limit(limit);
-
-  return results;
 }
 
-interface GetAllCompanyDataParams {
-  limit?: number;
-  offset?: number;
-  search?: string;
-  location?: string;
-}
-
+// ===========================
+// All Company Data
+// ===========================
 export async function getAllCompanyData({
   limit = 50,
   offset = 0,
   search = "",
   location = "",
-}: GetAllCompanyDataParams = {}) {
-  let query = db
+}: { limit?: number; offset?: number; search?: string; location?: string } = {}) {
+  const dbLimit = limit + 1;
+  let topQuery: any = db
     .select({
+      company_id: companies.company_id,
       name: companies.name,
-      country: companies.country,
-      company_size: sql<number>`MAX(${employee_counts.employee_count})`, // Use MAX or AVG
-      postings_count: sql<number>`COUNT(${postings.job_id})::int`,
+      postings_count: sql<number>`COUNT(${postings.job_id})::int`.as('postings_count'),
     })
     .from(companies)
-    .leftJoin(
-      employee_counts, 
-      eq(companies.company_id, employee_counts.company_id)
+    .leftJoin(postings, eq(companies.name, postings.company_name));
+
+  const conditions = [
+    and(
+      sql`LOWER(${companies.name}) != 'confidential'`,
+      sql`LOWER(${companies.name}) != 'confidential company'`,
+      sql`LOWER(${companies.name}) NOT LIKE 'confidential (%'`,
+      sql`LOWER(${companies.name}) NOT LIKE '%eox vantage%'`
     )
-    .leftJoin(
-      postings,
-      eq(companies.name, postings.company_name)
-    )
-    .groupBy(companies.name, companies.country) // Remove employee_count from groupBy
-    .$dynamic();
+  ];
 
-  if (search) {
-    query = query.where(ilike(companies.name, `%${search}%`));
-  }
+  if (search) conditions.push(ilike(companies.name, `%${search}%`));
+  if (location) conditions.push(eq(companies.country, location));
 
-  if (location) {
-    query = query.where(eq(companies.country, location));
-  }
-
-  return await query
+  topQuery = topQuery.where(and(...conditions))
+    .groupBy(companies.company_id, companies.name)
     .orderBy(desc(sql`COUNT(${postings.job_id})`))
-    .limit(limit)
+    .limit(dbLimit)
     .offset(offset);
+
+  const topCompaniesCte = db.$with("top_companies").as(topQuery);
+
+  return await db
+    .with(topCompaniesCte)
+    .select({
+      name: topCompaniesCte.name,
+      country: companies.country,
+      company_size: sql<number>`MAX(${employee_counts.employee_count})`,
+      postings_count: topCompaniesCte.postings_count,
+    })
+    .from(topCompaniesCte)
+    .leftJoin(companies, eq(topCompaniesCte.company_id, companies.company_id))
+    .leftJoin(employee_counts, eq(companies.company_id, employee_counts.company_id))
+    .groupBy(topCompaniesCte.name, companies.country, topCompaniesCte.postings_count)
+    .orderBy(desc(topCompaniesCte.postings_count));
 }
 
-// db/queries.ts
-
+// ===========================
+// Avg Company Salary (Normalized)
+// ===========================
 export async function getAverageCompanySalary() {
   const companyAvgCte = db.$with("company_avg").as(
     db
       .select({
         company_id: companies.company_id,
         company: companies.name,
-        avg_salary: sql<number>`
-          AVG(
-            CAST(
-              NULLIF(
-                regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'),
-                ''
-              ) AS NUMERIC
-            )
-          )
-        `.as("avg_salary"),
+        // FIX: Using Median (percentile_cont) instead of AVG to ignore outliers 🚀
+        avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary})`.as("avg_salary"),
         posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
       })
       .from(companies)
       .innerJoin(postings, sql`LOWER(${companies.name}) = LOWER(${postings.company_name})`)
+      // SANITY FILTER: Exclude obvious data errors (e.g., $208M or $0)
+      .where(and(
+        gt(postings.yearly_max_salary, 10000), 
+        lt(postings.yearly_max_salary, 1500000)
+      ))
       .groupBy(companies.company_id, companies.name)
   );
 
   const globalAvgCte = db.$with("global_avg").as(
     db.select({
-      global_avg_salary: sql<number>`
-        AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))
-      `.as("global_avg_salary"),
-    }).from(postings)
+      global_avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary})`.as("global_avg_salary"),
+    })
+    .from(postings)
+    .where(and(gt(postings.yearly_max_salary, 10000), lt(postings.yearly_max_salary, 1500000)))
   );
 
   return db
@@ -635,11 +579,13 @@ export async function getAverageCompanySalary() {
     })
     .from(companyAvgCte)
     .crossJoin(globalAvgCte)
-    .where(sql`${companyAvgCte.avg_salary} IS NOT NULL`)
     .orderBy(desc(companyAvgCte.avg_salary))
     .limit(10);
 }
 
+// ===========================
+// Top Companies By Size
+// ===========================
 export async function getTopCompaniesBySize() {
   const companySizeCte = db.$with("company_size").as(
     db
@@ -647,27 +593,19 @@ export async function getTopCompaniesBySize() {
         company_id: companies.company_id,
         company: companies.name,
         employee_count: employee_counts.employee_count,
-        avg_salary: sql<number>`
-          AVG(
-            CAST(
-              NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '')
-            AS NUMERIC)
-          )
-        `.as("avg_salary"),
+        // UPDATED: Now uses yearly_min_salary
+        avg_salary: avg(postings.yearly_min_salary).as("avg_salary"),
         posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
       })
       .from(companies)
       .innerJoin(employee_counts, eq(companies.company_id, employee_counts.company_id))
-      // FIX: Use leftJoin so companies like Walmart show up even with 0 postings
       .leftJoin(postings, sql`LOWER(${companies.name}) = LOWER(${postings.company_name})`)
       .groupBy(companies.company_id, companies.name, employee_counts.employee_count)
   );
 
   const globalAvgCte = db.$with("global_avg").as(
     db.select({
-      global_avg_salary: sql<number>`
-        AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))
-      `.as("global_avg_salary"),
+      global_avg_salary: avg(postings.yearly_min_salary).as("global_avg_salary"),
     }).from(postings)
   );
 
@@ -682,109 +620,92 @@ export async function getTopCompaniesBySize() {
     })
     .from(companySizeCte)
     .crossJoin(globalAvgCte)
-    .orderBy(desc(companySizeCte.employee_count)) // Order by size at DB level
+    .orderBy(desc(companySizeCte.employee_count))
     .limit(10);
 }
 
-
+// ===========================
+// Top Fortune Companies Stats
+// ===========================
 export async function getAvgSalaryPerEmployeeForTop10Fortune() {
-  const rankedEmployeeCounts = db.$with("ranked_counts").as(
+  // STEP 1: Rank the employee counts by time_recorded
+  const rankedCounts = db.$with("ranked_counts").as(
     db
       .select({
         company_id: employee_counts.company_id,
         employee_count: employee_counts.employee_count,
-        rn: sql<number>`
-          ROW_NUMBER() OVER (
-            PARTITION BY ${employee_counts.company_id}
-            ORDER BY ${employee_counts.time_recorded} DESC
-          )
-        `.as("rn"),
+        rn: sql<number>`row_number() over (partition by ${employee_counts.company_id} order by ${employee_counts.time_recorded} desc)`.as("rn"),
       })
       .from(employee_counts)
   );
 
-  const latestEmployeeCounts = db.$with("latest_counts").as(
+  // STEP 2: Filter to get ONLY the latest count (rn = 1)
+  const latestCounts = db.$with("latest_counts").as(
     db
       .select({
-        company_id: rankedEmployeeCounts.company_id,
-        employee_count: sql<number>`CAST(${rankedEmployeeCounts.employee_count} AS INTEGER)`.as("employee_count"),
+        company_id: rankedCounts.company_id,
+        employee_count: sql<number>`${rankedCounts.employee_count}::int`.as("employee_count"),
       })
-      .from(rankedEmployeeCounts)
-      .where(eq(rankedEmployeeCounts.rn, 1))
+      .from(rankedCounts)
+      .where(eq(rankedCounts.rn, 1))
   );
 
+  // STEP 3: Main query joining the cleaned data
   return await db
-    .with(rankedEmployeeCounts, latestEmployeeCounts)
+    .with(rankedCounts, latestCounts)
     .select({
       company: top_companies.name,
       fortune_rank: top_companies.fortune_rank,
-      // Actual average salary, no longer divided by employee count
-      avg_salary: sql<number>`
-        AVG(
-          CAST(
-            NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') 
-          AS NUMERIC)
-        )
-      `.mapWith(Number), 
-      employee_count: sql<number>`COALESCE(${latestEmployeeCounts.employee_count}, 0)`.mapWith(Number),
+      // Robust AVG with the sanity filter applied below
+      avg_salary: avg(postings.yearly_max_salary).mapWith(Number), 
+      employee_count: sql<number>`COALESCE(${latestCounts.employee_count}, 0)`.mapWith(Number),
       posting_count: sql<number>`COUNT(${postings.job_id})`.mapWith(Number),
     })
     .from(top_companies)
     .innerJoin(companies, eq(top_companies.name, companies.name))
-    .leftJoin(
-      latestEmployeeCounts,
-      eq(companies.company_id, latestEmployeeCounts.company_id)
-    )
+    .leftJoin(latestCounts, eq(companies.company_id, latestCounts.company_id))
     .leftJoin(postings, eq(companies.name, postings.company_name))
-    .groupBy(
-      top_companies.name,
-      top_companies.fortune_rank,
-      latestEmployeeCounts.employee_count
-    )
+    // FIX: Sanity filter to keep the graph realistic 🚀
+    .where(and(
+      gt(postings.yearly_max_salary, 20000), 
+      lt(postings.yearly_max_salary, 1200000)
+    ))
+    .groupBy(top_companies.name, top_companies.fortune_rank, latestCounts.employee_count)
     .orderBy(top_companies.fortune_rank)
     .limit(10);
 }
 
-
 export async function getCompanyBySlug(slug: string) {
   if (!slug) throw new Error("Slug is required");
-
-  const result = await db
+  return (await db
     .select()
     .from(companies)
-    .where(
-      sql`lower(regexp_replace(${companies.name}, '[^a-z0-9]', '', 'gi')) = lower(regexp_replace(${slug}, '[^a-z0-9]', '', 'gi'))`
-    )
-    .limit(1);
-
-  return result[0] || null;
+    .where(sql`lower(regexp_replace(${companies.name}, '[^a-z0-9]', '', 'gi')) = lower(regexp_replace(${slug}, '[^a-z0-9]', '', 'gi'))`)
+    .limit(1))[0] || null;
 }
-
 
 export async function getCompanyJobStats(companyName: string) {
   const result = await db
     .select({
       total_postings: sql<number>`COUNT(*)::int`,
       active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
-      avg_salary: sql<number>`AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))`,
-      remote_count: sql<number>`
-        SUM(
-          CASE WHEN LOWER(CAST(${postings.remote_allowed} AS TEXT)) ~ '^(1(\\.0+)?|true|t)$' THEN 1 ELSE 0 END
-        )::int
-      `,
+      // UPDATED: Now uses yearly_min_salary
+      avg_salary: avg(postings.yearly_min_salary),
+      remote_count: sql<number>`SUM(CASE WHEN LOWER(CAST(${postings.remote_allowed} AS TEXT)) ~ '^(1(\\.0+)?|true|t)$' THEN 1 ELSE 0 END)::int`,
     })
     .from(postings)
-    .where(eq(postings.company_name, companyName)); // Use exact match if possible
+    .where(eq(postings.company_name, companyName));
 
   return result[0];
 }
 
 export async function getCompanyTopRoles(companyName: string, limit = 10) {
-  const results = await db
+  return await db
     .select({
       title: sql<string>`COALESCE(${roleAliases.canonical_name}, ${postings.title})`,
       count: sql<number>`COUNT(*)::int`,
-      avg_salary: sql<number>`AVG(CAST(NULLIF(regexp_replace(${postings.min_salary}, '[^0-9.]', '', 'g'), '') AS NUMERIC))`,
+      // UPDATED: Now uses yearly_min_salary
+      avg_salary: avg(postings.yearly_min_salary),
     })
     .from(postings)
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
@@ -792,12 +713,10 @@ export async function getCompanyTopRoles(companyName: string, limit = 10) {
     .groupBy(sql`COALESCE(${roleAliases.canonical_name}, ${postings.title})`)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(limit);
-
-  return results;
 }
 
 export async function getCompanyTopSkills(companyName: string, limit = 15) {
-  const results = await db
+  return await db
     .select({
       skill_name: skills.skill_name,
       skill_abr: skills.skill_abr,
@@ -810,95 +729,61 @@ export async function getCompanyTopSkills(companyName: string, limit = 15) {
     .groupBy(skills.skill_name, skills.skill_abr)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(limit);
-
-  return results;
 }
 
 export async function getCompanyPostingsTimeSeries(companyName: string) {
-  const result = await db.execute<{
-    month: string;
-    count: number;
-  }>(sql`
-    SELECT 
-      TO_CHAR(DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000)), 'YYYY-MM') as month,
-      COUNT(*)::int as count
+  const result = await db.execute<{ month: string; count: number }>(sql`
+    SELECT TO_CHAR(DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000)), 'YYYY-MM') as month, COUNT(*)::int as count
     FROM ${postings}
     WHERE LOWER(company_name) = LOWER(${companyName})
     GROUP BY DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000))
     ORDER BY month ASC
   `);
-
   return result.rows;
 }
 
 export async function getCompanyLocationDistribution(companyName: string) {
-  const results = await db
-    .select({
-      location: postings.location,
-      count: sql<number>`COUNT(*)::int`,
-    })
+  return await db
+    .select({ location: postings.location, count: sql<number>`COUNT(*)::int` })
     .from(postings)
-    .where(
-      and(
-        sql`LOWER(${postings.company_name}) = LOWER(${companyName})`,
-        isNotNull(postings.location),
-        not(eq(postings.location, ''))
-      )
-    )
+    .where(and(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`, isNotNull(postings.location), not(eq(postings.location, ''))))
     .groupBy(postings.location)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(10);
-
-  return results;
 }
 
 export async function getCompanyExperienceLevels(companyName: string) {
-  const results = await db
-    .select({
-      experience_level: postings.formatted_experience_level,
-      count: sql<number>`COUNT(*)::int`,
-    })
+  return await db
+    .select({ experience_level: postings.formatted_experience_level, count: sql<number>`COUNT(*)::int` })
     .from(postings)
-    .where(
-      and(
-        sql`LOWER(${postings.company_name}) = LOWER(${companyName})`,
-        isNotNull(postings.formatted_experience_level)
-      )
-    )
+    .where(and(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`, isNotNull(postings.formatted_experience_level)))
     .groupBy(postings.formatted_experience_level)
     .orderBy(desc(sql`COUNT(*)`));
-
-  return results;
 }
 
 export async function getCompanySalaryDistribution(companyName: string) {
-  const results = await db.execute<{
-    salary_range: string;
-    count: number;
-  }>(sql`
+  // UPDATED: CASE statement now uses the clean yearly_min_salary column instead of regex
+  return (await db.execute<{ salary_range: string; count: number }>(sql`
     SELECT 
       CASE 
-        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 50000 THEN 'Under $50k'
-        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 75000 THEN '$50k-$75k'
-        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 100000 THEN '$75k-$100k'
-        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 150000 THEN '$100k-$150k'
-        WHEN CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC) < 200000 THEN '$150k-$200k'
+        WHEN yearly_min_salary < 50000 THEN 'Under $50k'
+        WHEN yearly_min_salary < 75000 THEN '$50k-$75k'
+        WHEN yearly_min_salary < 100000 THEN '$75k-$100k'
+        WHEN yearly_min_salary < 150000 THEN '$100k-$150k'
+        WHEN yearly_min_salary < 200000 THEN '$150k-$200k'
         ELSE 'Over $200k'
       END as salary_range,
       COUNT(*)::int as count
     FROM ${postings}
     WHERE LOWER(company_name) = LOWER(${companyName})
-      AND min_salary IS NOT NULL 
-      AND min_salary != ''
+      AND yearly_min_salary IS NOT NULL 
     GROUP BY salary_range
-    ORDER BY MIN(CAST(NULLIF(regexp_replace(min_salary, '[^0-9.]', '', 'g'), '') AS NUMERIC))
-  `);
-
-  return results.rows;
+    ORDER BY MIN(yearly_min_salary)
+  `)).rows;
 }
 
 export async function getCompanyRecentPostings(companyName: string, limit = 10) {
-  const results = await db
+  return await db
     .select({
       job_id: postings.job_id,
       title: postings.title,
@@ -913,6 +798,4 @@ export async function getCompanyRecentPostings(companyName: string, limit = 10) 
     .where(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`)
     .orderBy(desc(postings.listed_time))
     .limit(limit);
-
-  return results;
-  }
+}

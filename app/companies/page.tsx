@@ -16,22 +16,22 @@ import {
 
 import { Suspense } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PaginationControls } from "@/components/ui/skills/pagination-controls";
 
-interface PageProps {
+type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}
+};
 
 export default async function CompaniesPage({ searchParams }: PageProps) {
   const filters = await searchParamsCache.parse(searchParams);
-
-  const page = filters.page || 1;
+  const page = typeof filters.page === "string" ? parseInt(filters.page) : filters.page || 1;
   const limit = 50;
   const offset = (page - 1) * limit;
 
+  // Parallel data fetching - all queries run simultaneously
   const [companiesRaw, salaryResults, , fortuneResults] = await Promise.all([
     getAllCompanyData({
-      limit,
+      limit, // Query already handles limit + 1 internally
       offset,
       search: filters.q,
       location: filters.location,
@@ -41,16 +41,14 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
     getAvgSalaryPerEmployeeForTop10Fortune(),
   ]);
 
+  // Database query returns limit+1 rows to check for next page
+  const hasNextPage = companiesRaw.length > limit;
+  const hasPrevPage = page > 1;
+
+  // Process companies (take only 'limit' items, not limit+1)
+  // No filtering needed since query now filters at database level
   const companies = companiesRaw
-    .filter((company: any) => {
-      const name = company.name?.toLowerCase() || "";
-      return !(
-        name === "confidential" ||
-        name === "confidential company" ||
-        name.startsWith("confidential (") ||
-        name.includes("eox vantage")
-      );
-    })
+    .slice(0, limit)
     .map((company: any) => ({
       ...company,
       postings_count: Number(company.postings_count ?? 0),
@@ -74,27 +72,26 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
   const globalAvg = Number(salaryResults[0]?.global_avg_salary ?? 0);
 
-  const hasPrevPage = page > 1;
-  const hasNextPage = companies.length === limit;
-
   const buildPageUrl = (pageNum: number) => {
     const params = new URLSearchParams();
     params.set("page", pageNum.toString());
     if (filters.q) params.set("q", filters.q);
     if (filters.location) params.set("location", filters.location);
-    return `?${params.toString()}`;
+    return `/companies?${params.toString()}`;
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-linear-to-r from-primary to-secondary">
-          Company Explorer
-        </h1>
-        <div className="hidden sm:block w-full max-w-2xl">
-          <FilterBar />
+    <div className="container mx-auto p-6 space-y-8 pb-16">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="max-w-2xl space-y-2">
+          <h1 className="text-4xl font-black tracking-tight lg:text-5xl">
+            Company Explorer
+          </h1>
         </div>
       </div>
+
+      {/* Search Bar */}
+      <FilterBar />
 
       <Suspense
         fallback={<div className="h-28 rounded-xl bg-muted animate-pulse" />}
@@ -148,9 +145,6 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Top Companies</h2>
-        <p className="text-sm text-muted-foreground">
-          Showing {offset + 1}–{offset + companies.length} of many
-        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -173,25 +167,28 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         ))}
       </div>
 
-      <div className="flex items-center justify-center gap-3 mt-6">
-        {hasPrevPage && (
-          <Link
-            href={buildPageUrl(page - 1)}
-            className="px-3 py-2 rounded-md border"
-          >
-            <ChevronLeft className="h-4 w-4 inline" />
-          </Link>
-        )}
-        <span className="px-4 py-2 text-sm">Page {page}</span>
-        {hasNextPage && (
-          <Link
-            href={buildPageUrl(page + 1)}
-            className="px-3 py-2 rounded-md border"
-          >
-            <ChevronRight className="h-4 w-4 inline" />
-          </Link>
-        )}
-      </div>
+      {/* Pagination Controls */}
+      {(hasNextPage || hasPrevPage) && (
+        <div className="flex flex-col sm:flex-row items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800 gap-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Showing{" "}
+            <span className="font-bold text-slate-900 dark:text-white">
+              {offset + 1}
+            </span>{" "}
+            to{" "}
+            <span className="font-bold text-slate-900 dark:text-white">
+              {offset + companies.length}
+            </span>{" "}
+            of many companies
+          </p>
+          <PaginationControls
+            currentPage={page}
+            hasNextPage={hasNextPage}
+            hasPrevPage={hasPrevPage}
+            buildPageUrl={buildPageUrl}
+          />
+        </div>
+      )}
     </div>
   );
 }
