@@ -691,7 +691,7 @@ export async function getCompanyJobStats(companyName: string) {
       active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
       // UPDATED: Now uses yearly_min_salary
       avg_salary: avg(postings.yearly_min_salary),
-      remote_count: sql<number>`SUM(CASE WHEN LOWER(CAST(${postings.remote_allowed} AS TEXT)) ~ '^(1(\\.0+)?|true|t)$' THEN 1 ELSE 0 END)::int`,
+      remote_count: sql<number>`SUM(CASE WHEN ${postings.remote_allowed} = true THEN 1 ELSE 0 END)::int`,
     })
     .from(postings)
     .where(eq(postings.company_name, companyName));
@@ -796,6 +796,192 @@ export async function getCompanyRecentPostings(companyName: string, limit = 10) 
     })
     .from(postings)
     .where(sql`LOWER(${postings.company_name}) = LOWER(${companyName})`)
+    .orderBy(desc(postings.listed_time))
+    .limit(limit);
+}
+
+/**
+ * Get aggregated stats by location
+ */
+export async function getJobsByLocation() {
+  return await db
+    .select({
+      location: postings.location,
+      city: companies.city,
+      state: companies.state,
+      country: companies.country,
+      jobCount: sql<number>`count(distinct ${postings.job_id})`.as('job_count'),
+      companyCount: sql<number>`count(distinct ${postings.company_id})`.as('company_count'),
+      avgMinSalary: sql<number>`avg(${postings.yearly_min_salary})`.as('avg_min_salary'),
+      avgMaxSalary: sql<number>`avg(${postings.yearly_max_salary})`.as('avg_max_salary'),
+      // Fix: Compare text to string '1' or 'true'
+      remoteCount: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as('remote_count'),
+    })
+    .from(postings)
+    .leftJoin(companies, eq(postings.company_id, companies.company_id))
+    .where(isNotNull(postings.location))
+    .groupBy(postings.location, companies.city, companies.state, companies.country)
+    .orderBy(desc(sql`count(distinct ${postings.job_id})`));
+}
+
+/**
+ * Get aggregated stats by city across all companies
+ */
+export async function getJobsByCity() {
+  return await db
+    .select({
+      city: companies.city,
+      state: sql<string>`COALESCE(
+        MIN(${companies.state}) FILTER (WHERE LENGTH(${companies.state}) <= 3 AND ${companies.state} != '0'),
+        MIN(${companies.state}) FILTER (WHERE ${companies.state} != '0')
+      )`,
+      country: companies.country,
+      lat: sql<number>`AVG(${companies.lat})`,
+      lng: sql<number>`AVG(${companies.lng})`,
+      jobCount: sql<number>`count(distinct ${postings.job_id})::int`,
+      companyCount: sql<number>`count(distinct ${postings.company_id})::int`,
+      avgSalary: sql<number>`round(avg((${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2))::int`,
+      // Fix: cast text to float for ratio calculation
+      remoteRatio: sql<number>`(
+        count(*) FILTER (WHERE ${postings.remote_allowed} IN ('1', 'true'))::float / NULLIF(count(*), 0)
+      )`,
+    })
+    .from(companies)
+    .innerJoin(
+      postings,
+      eq(companies.company_id, sql`SPLIT_PART(${postings.company_id}, '.', 1)`)
+    )
+    .where(
+      and(
+        isNotNull(companies.city),
+        isNotNull(companies.lat),
+        isNotNull(companies.lng)
+      )
+    )
+    .groupBy(companies.city, companies.state, companies.country)
+    .orderBy(desc(sql`count(distinct ${postings.job_id})`));
+}
+
+/**
+ * Get detailed stats for a specific location
+ */
+
+/**
+ * Get jobs by country for choropleth map
+ */
+export async function getJobsByCountry() {
+  return await db
+    .select({
+      country: companies.country,
+      jobCount: sql<number>`count(distinct ${postings.job_id})`.as('job_count'),
+      avgSalary: sql<number>`avg(${postings.normalized_salary}::numeric)`.as('avg_salary'),
+      cities: sql<string[]>`array_agg(distinct ${companies.city})`.as('cities'),
+    })
+    .from(companies)
+    .innerJoin(postings, eq(companies.company_id, sql`SPLIT_PART(${postings.company_id}, '.', 1)`))
+    .where(isNotNull(companies.country))
+    .groupBy(companies.country)
+    .orderBy(desc(sql`count(distinct ${postings.job_id})`));
+}
+
+/**
+ * Get detailed stats for a specific location
+ */
+export async function getLocationStats(locationSlug: string) {
+  const result = await db
+    .select({
+      location: postings.location,
+      city: companies.city,
+      state: companies.state,
+      country: companies.country,
+      totalJobs: sql<number>`count(distinct ${postings.job_id})`.as("total_jobs"),
+      totalCompanies: sql<number>`count(distinct ${postings.company_id})`.as("total_companies"),
+      avgMinSalary: sql<number>`min(${postings.yearly_min_salary})`.as("avg_min_salary"),
+      avgMaxSalary: sql<number>`max(${postings.yearly_max_salary})`.as("avg_max_salary"),
+      avgMedSalary: sql<number>`round(avg(${postings.yearly_med_salary}))`.as("avg_med_salary"),
+      // Fix: Robust string comparison
+      remoteJobs: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as("remote_jobs"),
+      totalViews: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.views}, ''), '0') AS numeric)) AS bigint))`.as("total_views"),
+      totalApplies: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.applies}, ''), '0') AS numeric)) AS bigint))`.as("total_applies"),
+    })
+    .from(postings)
+    .leftJoin(companies, eq(postings.company_id, companies.company_id))
+    .where(
+      sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
+    )
+    .groupBy(postings.location, companies.city, companies.state, companies.country);
+
+  return result[0] || null;
+}
+
+/**
+ * Get top skills for a specific location
+ */
+export async function getTopSkillsByLocation(locationSlug: string, limit = 15) {
+  return await db
+    .select({
+      skillName: skills.skill_name,
+      skillAbr: skills.skill_abr,
+      count: sql<number>`count(*)`.as('count'),
+    })
+    .from(job_skills)
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .where(
+      sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
+    )
+    .groupBy(skills.skill_name, skills.skill_abr)
+    .orderBy(desc(sql`count(*)`))
+    .limit(limit);
+}
+
+/**
+ * Get top companies hiring in a specific location
+ */
+export async function getTopCompaniesByLocation(locationSlug: string, limit = 10) {
+  return await db
+    .select({
+      companyName: companies.name,
+      companyId: companies.company_id,
+      jobCount: sql<number>`count(*)`.as('job_count'),
+      description: companies.description,
+      companySize: companies.company_size,
+    })
+    .from(postings)
+    .innerJoin(companies, eq(postings.company_id, companies.company_id))
+    .where(
+      sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
+    )
+    .groupBy(
+      companies.name,
+      companies.company_id,
+      companies.description,
+      companies.company_size
+    )
+    .orderBy(desc(sql`count(*)`))
+    .limit(limit);
+}
+
+/**
+ * Get recent postings for a location
+ */
+export async function getRecentJobsByLocation(locationSlug: string, limit = 20) {
+  return await db
+    .select({
+      jobId: postings.job_id,
+      title: postings.title,
+      companyName: postings.company_name,
+      location: postings.location,
+      salaryMin: postings.yearly_min_salary,
+      salaryMax: postings.yearly_max_salary,
+      listedTime: postings.listed_time,
+      remoteAllowed: postings.remote_allowed,
+      experienceLevel: postings.formatted_experience_level,
+    })
+    .from(postings)
+    .where(
+      sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
+    )
     .orderBy(desc(postings.listed_time))
     .limit(limit);
 }

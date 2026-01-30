@@ -1,0 +1,150 @@
+import csv
+
+cities = [
+    # --- UNITED STATES ---
+    ("Chicago, IL, USA", 41.878113, -87.629799, "us"),
+    ("New York, NY, USA", 40.712776, -74.005974, "us"),
+    ("Los Angeles, CA, USA", 34.052235, -118.243683, "us"),
+    ("San Francisco, CA, USA", 37.774929, -122.419418, "us"),
+    ("San Diego, CA, USA", 32.715738, -117.161084, "us"),
+    ("Austin, TX, USA", 30.267153, -97.743061, "us"),
+    ("Seattle, WA, USA", 47.606209, -122.332071, "us"),
+    ("Boston, MA, USA", 42.360082, -71.05888, "us"),
+    ("Denver, CO, USA", 39.739236, -104.990251, "us"),
+    ("Atlanta, GA, USA", 33.748995, -84.387982, "us"),
+    ("Miami, FL, USA", 25.76168, -80.19179, "us"),
+    ("Dallas, TX, USA", 32.776664, -96.796988, "us"),
+    ("Phoenix, AZ, USA", 33.448377, -112.074037, "us"),
+    ("Philadelphia, PA, USA", 39.952583, -75.165222, "us"),
+    ("Houston, TX, USA", 29.760427, -95.369803, "us"),
+    ("Portland, OR, USA", 45.515232, -122.678385, "us"),
+    ("Washington, DC, USA", 38.907192, -77.036871, "us"),
+    ("Salt Lake City, UT, USA", 40.760779, -111.891047, "us"),
+    ("Nashville, TN, USA", 36.162664, -86.781602, "us"),
+    ("Charlotte, NC, USA", 35.227087, -80.843127, "us"),
+    ("Raleigh, NC, USA", 35.77959, -78.638179, "us"),
+    ("Minneapolis, MN, USA", 44.977753, -93.265011, "us"),
+    ("Detroit, MI, USA", 42.331427, -83.045754, "us"),
+    ("Las Vegas, NV, USA", 36.171563, -115.139101, "us"),
+    ("Orlando, FL, USA", 28.538335, -81.379236, "us"),
+    ("San Jose, CA, USA", 37.338208, -121.886329, "us"),
+    ("Palo Alto, CA, USA", 37.441883, -122.143019, "us"),
+    ("Mountain View, CA, USA", 37.386052, -122.083851, "us"),
+    ("Redmond, WA, USA", 47.673988, -122.121512, "us"),
+    ("Boulder, CO, USA", 40.014986, -105.270546, "us"),
+    ("Columbus, OH, USA", 39.961176, -82.998794, "us"),
+    ("Indianapolis, IN, USA", 39.768403, -86.158068, "us"),
+    ("Kansas City, MO, USA", 39.099727, -94.578567, "us"),
+    ("Pittsburgh, PA, USA", 40.440625, -79.995886, "us"),
+    
+    # --- CANADA ---
+    ("Toronto, ON, Canada", 43.653226, -79.383184, "ca"),
+    ("Vancouver, BC, Canada", 49.282729, -123.120738, "ca"),
+    ("Montreal, QC, Canada", 45.501689, -73.567256, "ca"),
+    ("Ottawa, ON, Canada", 45.42153, -75.697193, "ca"),
+    ("Calgary, AB, Canada", 51.044733, -114.071883, "ca"),
+    ("Edmonton, AB, Canada", 53.546125, -113.493823, "ca"),
+    ("Quebec City, QC, Canada", 46.813878, -71.207981, "ca"),
+
+    # --- EUROPE ---
+    ("London, UK", 51.507222, -0.1275, "uk"),
+    ("Paris, France", 48.856614, 2.352222, "fr"),
+    ("Berlin, Germany", 52.520007, 13.404954, "de"),
+    ("Munich, Germany", 48.135125, 11.58198, "de"),
+    ("Amsterdam, Netherlands", 52.367573, 4.904138, "nl"),
+    ("Dublin, Ireland", 53.349805, -6.26031, "ie"),
+    ("Madrid, Spain", 40.416775, -3.70379, "es"),
+    ("Barcelona, Spain", 41.385064, 2.173403, "es"),
+    ("Rome, Italy", 41.902783, 12.496366, "it"),
+    ("Stockholm, Sweden", 59.329323, 18.068581, "se"),
+    ("Zurich, Switzerland", 47.376887, 8.541694, "ch"),
+    ("Copenhagen, Denmark", 55.676097, 12.568337, "dk"),
+    ("Oslo, Norway", 59.913869, 10.752245, "no"),
+    ("Helsinki, Finland", 60.169856, 24.938379, "fi"),
+    ("Brussels, Belgium", 50.85034, 4.35171, "be"),
+    ("Vienna, Austria", 48.208174, 16.373819, "at"),
+    ("Prague, Czech Republic", 50.075538, 14.4378, "cz"),
+    ("Warsaw, Poland", 52.229676, 21.012229, "pl"),
+    ("Lisbon, Portugal", 38.722252, -9.139337, "pt"),
+    ("Milan, Italy", 45.464204, 9.189982, "it"),
+    ("Athens, Greece", 37.98381, 23.727539, "gr"),
+    ("Geneva, Switzerland", 46.204391, 6.143158, "ch"),
+    ("Manchester, UK", 53.480759, -2.242631, "uk"),
+    ("Edinburgh, UK", 55.953252, -3.188267, "uk"),
+    
+    # --- ASIA / PACIFIC ---
+    ("Tokyo, Japan", 35.689487, 139.691706, "jp"),
+    ("Singapore, Singapore", 1.352083, 103.819836, "sg"),
+    ("Sydney, NSW, Australia", -33.86882, 151.209296, "au"),
+    ("Melbourne, VIC, Australia", -37.813628, 144.963058, "au"),
+    ("Mumbai, India", 19.075984, 72.877656, "in"),
+    ("Bengaluru, India", 12.971599, 77.594563, "in"),
+    ("Seoul, South Korea", 37.566535, 126.977969, "kr"),
+    ("Hong Kong, HK", 22.319304, 114.169361, "hk"),
+    ("Bangkok, Thailand", 13.756331, 100.501765, "th"),
+    ("Osaka, Japan", 34.693738, 135.502165, "jp"),
+    ("Kyoto, Japan", 35.011636, 135.768029, "jp"),
+    ("Shanghai, China", 31.230416, 121.473701, "cn"),
+    ("Beijing, China", 39.904211, 116.407395, "cn"),
+    ("Shenzhen, China", 22.543099, 114.057868, "cn"),
+    ("Taipei, Taiwan", 25.032969, 121.565418, "tw"),
+    ("New Delhi, India", 28.613939, 77.209021, "in"),
+    ("Hyderabad, India", 17.385044, 78.486671, "in"),
+    ("Chennai, India", 13.08268, 80.270718, "in"),
+    ("Pune, India", 18.52043, 73.856744, "in"),
+    ("Ho Chi Minh City, Vietnam", 10.823099, 106.629664, "vn"),
+    ("Hanoi, Vietnam", 21.028511, 105.804817, "vn"),
+    ("Manila, Philippines", 14.599512, 120.984219, "ph"),
+    ("Jakarta, Indonesia", -6.208763, 106.845599, "id"),
+    ("Kuala Lumpur, Malaysia", 3.139003, 101.686855, "my"),
+    ("Perth, WA, Australia", -31.950527, 115.860457, "au"),
+    ("Brisbane, QLD, Australia", -27.470479, 153.026034, "au"),
+    ("Auckland, New Zealand", -36.84846, 174.763332, "nz"),
+
+    # --- LATIN AMERICA ---
+    ("Sao Paulo, Brazil", -23.55052, -46.633309, "br"),
+    ("Mexico City, Mexico", 19.432608, -99.133208, "mx"),
+    ("Buenos Aires, Argentina", -34.603684, -58.381559, "ar"),
+    ("Bogota, Colombia", 4.710989, -74.072092, "co"),
+    ("Rio de Janeiro, Brazil", -22.906847, -43.172896, "br"),
+    ("Santiago, Chile", -33.44889, -70.669265, "cl"),
+    ("Lima, Peru", -12.046374, -77.042793, "pe"),
+    ("Monterrey, Mexico", 25.686614, -100.316113, "mx"),
+    ("Guadalajara, Mexico", 20.659699, -103.349609, "mx"),
+
+    # --- MIDDLE EAST / AFRICA ---
+    ("Dubai, UAE", 25.204849, 55.270783, "ae"),
+    ("Tel Aviv, Israel", 32.0853, 34.781768, "il"),
+    ("Johannesburg, South Africa", -26.204103, 28.047305, "za"),
+    ("Cape Town, South Africa", -33.924869, 18.424055, "za"),
+    ("Istanbul, Turkey", 41.008238, 28.978359, "tr"),
+    ("Abu Dhabi, UAE", 24.453884, 54.377344, "ae"),
+    ("Riyadh, Saudi Arabia", 24.713552, 46.675296, "sa"),
+    ("Doha, Qatar", 25.285447, 51.53104, "qa"),
+    ("Nairobi, Kenya", -1.292066, 36.821946, "ke"),
+    ("Lagos, Nigeria", 6.524379, 3.379206, "ng"),
+    ("Cairo, Egypt", 30.04442, 31.235712, "eg"),
+    ("Casablanca, Morocco", 33.57311, -7.589843, "ma"),
+]
+
+variations = ["", "lower", "upper", "suffix", "dash_suffix", "quoted_usa", "quoted_iso", "remote", "office"]
+
+with open('location_cache.csv', mode='w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(["raw_location", "normalized_location", "latitude", "longitude"])
+    
+    for city_name, lat, long, iso in cities:
+        base = city_name.split(',')[0]
+        # Generate the specific patterns you requested
+        rows = [
+            [base.lower(), city_name, lat, long],
+            [base.upper(), city_name, lat, long],
+            [base, city_name, lat, long],
+            [f"{base.lower()} {iso}", city_name, lat, long],
+            [f"{base.lower()} - {iso}", city_name, lat, long],
+            [f"{base.lower()}, usa" if iso == "us" else f"{base.lower()}, {city_name.split(',')[-1].strip().lower()}", city_name, lat, long],
+            [f"{base.lower()}, {iso}", city_name, lat, long],
+            [f"{base.lower()} remote", city_name, lat, long],
+            [f"{base.lower} office", city_name, lat, long]
+        ]
+        writer.writerows(rows)

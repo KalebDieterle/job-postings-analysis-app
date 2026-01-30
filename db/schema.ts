@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp, index, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp, index, serial, real } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const benefits = pgTable("benefits", {
@@ -18,7 +18,12 @@ export const companies = pgTable("companies", {
   zip_code: text("zip_code"),
   address: text("address"),
   url: text("url"),
-});
+  lat: real("lat"),
+  lng: real("lng"),
+}, (table) => ({
+  latLngIdx: index('companies_lat_lng_idx').on(table.lat, table.lng),
+  cityIdx: index('companies_city_idx').on(table.city),
+}));
 
 export const company_industries = pgTable("company_industries", {
     company_id: text("company_id").notNull(),
@@ -79,7 +84,7 @@ export const postings = pgTable("postings", {
   formatted_experience_level: text("formatted_experience_level"),
   skills_desc: text("skills_desc"),
   listed_time: timestamp("listed_time").notNull(),
-  posting_domain: text("posting_domain")  ,
+  posting_domain: text("posting_domain"),
   sponsored: boolean("sponsored"),
   work_type: text("work_type"),
   currency: text("currency"),
@@ -197,9 +202,9 @@ export const roleAliases = pgTable('role_aliases', {
 export const top_companies = pgTable('top_companies', {
     id: serial('id').primaryKey(),
     fortune_rank: integer('fortune_rank').notNull(),
-    revenue_m: text('revenue_m').notNull(), // numeric in DB, use text for compatibility or use decimal if supported
-    profit_m: text('profit_m').notNull(), // numeric in DB, use text for compatibility or use decimal if supported
-    market_value_m: text('market_value_m').notNull(), // numeric in DB, use text for compatibility or use decimal if supported
+    revenue_m: text('revenue_m').notNull(),
+    profit_m: text('profit_m').notNull(),
+    market_value_m: text('market_value_m').notNull(),
     year: integer('year').notNull(),
     name: text('name').notNull(),
     hq_state: text('hq_state').notNull(),
