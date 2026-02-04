@@ -15,7 +15,6 @@ This README documents the project structure, how the pieces fit together, and ho
 - Key implementation notes
 - Deployment guidance
 - Troubleshooting & common issues
-- Contributing
 
 ## Project overview
 
@@ -174,13 +173,6 @@ if (!slugStr) notFound();
 
 - Database connectivity errors — confirm `DATABASE_URL`, that the DB is running, and that migrations were applied.
 
-## Contributing
-
-If you'd like to contribute:
-
-1. Fork the repository and create a branch for your change
-2. Run the dev server locally and add tests where appropriate
-3. Open a PR describing your changes
 
 ## Useful files and quick references
 

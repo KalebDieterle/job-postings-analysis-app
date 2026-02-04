@@ -88,9 +88,11 @@ export async function getRecentJobs(limit = 10) {
 
 export async function getTopJobRoles(
   limit: number,
-  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string },
+  page: number = 1,
 ) {
   const conditions = [];
+  const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
 
   if (filters?.location) {
     conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
@@ -129,7 +131,8 @@ export async function getTopJobRoles(
   return await query
     .groupBy(sql`COALESCE(${roleAliases.canonical_name}, ${postings.title})`)
     .orderBy(desc(sql`COUNT(*)`))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 }
 
 // ===========================
@@ -1135,4 +1138,493 @@ export async function getTrendingStats(timeframe = 30) {
     newEntries: Number(stats?.new_entries || 0),
     dataAsOf: stats?.max_date || 'Unknown',
   };
+}
+
+// ===========================
+// Role Analytics Queries
+// ===========================
+
+export async function getAverageSalary(
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  const query = db
+    .select({
+      avg_salary: avg(postings.yearly_min_salary),
+    })
+    .from(postings)
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`);
+
+  if (conditions.length > 0) {
+    query.where(and(...conditions));
+  }
+
+  const result = await query;
+  return Number(result[0]?.avg_salary || 0);
+}
+
+export async function getTopLocation(
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  const query = db
+    .select({
+      location: postings.location,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
+    .where(and(isNotNull(postings.location), ...(conditions.length > 0 ? conditions : [])))
+    .groupBy(postings.location)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(1);
+
+  const result = await query;
+  return result[0] || { location: 'N/A', count: 0 };
+}
+
+export async function getRemotePercentage(
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  const query = db.execute<{ total: number; remote: number }>(sql`
+    SELECT 
+      COUNT(*)::int as total,
+      COUNT(*) FILTER (WHERE LOWER(location) LIKE '%remote%')::int as remote
+    FROM ${postings} p
+    LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
+    ${conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``}
+  `);
+
+  const result = await query;
+  const stats = result.rows[0];
+  if (!stats || stats.total === 0) return 0;
+  return Math.round((stats.remote / stats.total) * 100);
+}
+
+export async function getRoleDistribution(
+  limit = 10,
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  const query = db
+    .select({
+      title: sql<string>`COALESCE(${roleAliases.canonical_name}, ${postings.title})`,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`);
+
+  if (conditions.length > 0) {
+    query.where(and(...conditions));
+  }
+
+  return await query
+    .groupBy(sql`COALESCE(${roleAliases.canonical_name}, ${postings.title})`)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(limit);
+}
+
+export async function getSkillsFrequency(
+  limit = 20,
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  const query = db
+    .select({
+      skill_name: skills.skill_name,
+      skill_abr: skills.skill_abr,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(skills)
+    .innerJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`);
+
+  if (conditions.length > 0) {
+    query.where(and(...conditions));
+  }
+
+  return await query
+    .groupBy(skills.skill_name, skills.skill_abr)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(limit);
+}
+
+export async function getPostingTimeline(
+  days = 90,
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  conditions.push(sql`to_timestamp(${postings.listed_time}::double precision / 1000) >= to_timestamp(${cutoffDate.getTime() / 1000})`);
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  return await db
+    .select({
+      week: sql<string>`TO_CHAR(DATE_TRUNC('week', to_timestamp(${postings.listed_time}::double precision / 1000)), 'YYYY-MM-DD')`,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
+    .where(and(...conditions))
+    .groupBy(sql`DATE_TRUNC('week', to_timestamp(${postings.listed_time}::double precision / 1000))`)
+    .orderBy(sql`DATE_TRUNC('week', to_timestamp(${postings.listed_time}::double precision / 1000)) ASC`);
+}
+
+export async function getExperienceDistribution(
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
+  const conditions = [];
+
+  if (filters?.location) {
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+  }
+
+  if (filters?.experience && filters.experience.length > 0) {
+    conditions.push(inArray(postings.formatted_experience_level, filters.experience));
+  }
+
+  if (filters?.minSalary && filters.minSalary > 0) {
+    conditions.push(gte(postings.yearly_min_salary, filters.minSalary));
+  }
+
+  if (filters?.q) {
+    conditions.push(
+      sql`(
+        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+      )`
+    );
+  }
+
+  const query = db
+    .select({
+      level: postings.formatted_experience_level,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(postings)
+    .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
+    .where(and(isNotNull(postings.formatted_experience_level), ...(conditions.length > 0 ? conditions : [])))
+    .groupBy(postings.formatted_experience_level)
+    .orderBy(desc(sql`COUNT(*)`));
+
+  return await query;
+}
+
+// ===========================
+// Home Page Analytics Queries
+// ===========================
+
+export async function getTotalStats() {
+  const result = await db.execute<{
+    total_jobs: number;
+    avg_salary: number;
+    total_companies: number;
+    total_skills: number;
+  }>(sql`
+    SELECT 
+      (SELECT COUNT(*)::int FROM ${postings}) as total_jobs,
+      (SELECT ROUND(AVG(yearly_min_salary))::int FROM ${postings} WHERE yearly_min_salary IS NOT NULL) as avg_salary,
+      (SELECT COUNT(DISTINCT company_id)::int FROM ${companies}) as total_companies,
+      (SELECT COUNT(*)::int FROM ${skills}) as total_skills
+  `);
+
+  const stats = result.rows[0];
+  
+  // Calculate monthly growth (last 30 days vs previous 30 days)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const sixtyDaysAgo = new Date();
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+  const growthResult = await db.execute<{ current: number; previous: number }>(sql`
+    SELECT 
+      COUNT(*) FILTER (WHERE to_timestamp(listed_time::double precision / 1000) >= ${thirtyDaysAgo.toISOString()}::timestamp)::int as current,
+      COUNT(*) FILTER (WHERE to_timestamp(listed_time::double precision / 1000) >= ${sixtyDaysAgo.toISOString()}::timestamp 
+                         AND to_timestamp(listed_time::double precision / 1000) < ${thirtyDaysAgo.toISOString()}::timestamp)::int as previous
+    FROM ${postings}
+  `);
+
+  const growth = growthResult.rows[0];
+  const monthlyGrowth = growth?.previous > 0 
+    ? Math.round(((growth.current - growth.previous) / growth.previous) * 100)
+    : 0;
+
+  return {
+    totalJobs: Number(stats?.total_jobs ?? 0) || 0,
+    avgSalary: Number(stats?.avg_salary ?? 0) || 0,
+    totalCompanies: Number(stats?.total_companies ?? 0) || 0,
+    totalSkills: Number(stats?.total_skills ?? 0) || 0,
+    monthlyGrowth: Number.isFinite(monthlyGrowth) ? monthlyGrowth : 0,
+  };
+}
+
+export async function getIndustryBreakdown(limit = 10) {
+  return await db
+    .select({
+      industry_name: industries.industry_name,
+      count: sql<number>`COUNT(DISTINCT ${postings.job_id})::int`,
+    })
+    .from(industries)
+    .innerJoin(job_industries, eq(industries.industry_id, job_industries.industry_id))
+    .innerJoin(postings, eq(job_industries.job_id, postings.job_id))
+    .groupBy(industries.industry_name)
+    .orderBy(desc(sql`COUNT(DISTINCT ${postings.job_id})`))
+    .limit(limit);
+}
+
+export async function getTopHiringCompanies(limit = 6) {
+  const result = await db.execute<{
+    company_name: string;
+    open_positions: number;
+    avg_salary: number;
+    top_skills: string;
+  }>(sql`
+    WITH company_stats AS (
+      SELECT 
+        p.company_name,
+        COUNT(DISTINCT p.job_id)::int as open_positions,
+        ROUND(AVG(p.yearly_min_salary))::int as avg_salary
+      FROM ${postings} p
+      WHERE p.company_name IS NOT NULL
+      GROUP BY p.company_name
+      ORDER BY open_positions DESC
+      LIMIT ${limit}
+    ),
+    company_skills AS (
+      SELECT 
+        p.company_name,
+        s.skill_name,
+        COUNT(*)::int as skill_count,
+        ROW_NUMBER() OVER (PARTITION BY p.company_name ORDER BY COUNT(*) DESC) as rn
+      FROM ${postings} p
+      INNER JOIN ${job_skills} js ON p.job_id = js.job_id
+      INNER JOIN ${skills} s ON js.skill_abr = s.skill_abr
+      WHERE p.company_name IN (SELECT company_name FROM company_stats)
+      GROUP BY p.company_name, s.skill_name
+    )
+    SELECT 
+      cs.company_name,
+      cs.open_positions,
+      cs.avg_salary,
+      STRING_AGG(csk.skill_name, '|' ORDER BY csk.skill_count DESC) FILTER (WHERE csk.rn <= 3) as top_skills
+    FROM company_stats cs
+    LEFT JOIN company_skills csk ON cs.company_name = csk.company_name AND csk.rn <= 3
+    GROUP BY cs.company_name, cs.open_positions, cs.avg_salary
+    ORDER BY cs.open_positions DESC
+  `);
+
+  return result.rows.map(row => ({
+    company_name: row.company_name,
+    open_positions: Number(row.open_positions),
+    avg_salary: Number(row.avg_salary),
+    top_skills: row.top_skills ? row.top_skills.split('|') : [],
+  }));
+}
+
+export async function getSalaryInsights() {
+  const result = await db.execute<{
+    highest_role: string;
+    highest_salary: number;
+    lowest_role: string;
+    lowest_salary: number;
+    median_salary: number;
+    min_salary: number;
+    max_salary: number;
+  }>(sql`
+    WITH salary_data AS (
+      SELECT 
+        COALESCE(ra.canonical_name, p.title) as role,
+        p.yearly_min_salary as salary
+      FROM ${postings} p
+      LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
+      WHERE p.yearly_min_salary IS NOT NULL 
+        AND p.yearly_min_salary > 10000 
+        AND p.yearly_min_salary < 1000000
+    ),
+    highest AS (
+      SELECT role, AVG(salary)::int as avg_salary
+      FROM salary_data
+      GROUP BY role
+      ORDER BY avg_salary DESC
+      LIMIT 1
+    ),
+    lowest AS (
+      SELECT role, AVG(salary)::int as avg_salary
+      FROM salary_data
+      GROUP BY role
+      HAVING COUNT(*) > 10
+      ORDER BY avg_salary ASC
+      LIMIT 1
+    )
+    SELECT 
+      (SELECT role FROM highest) as highest_role,
+      (SELECT avg_salary FROM highest) as highest_salary,
+      (SELECT role FROM lowest) as lowest_role,
+      (SELECT avg_salary FROM lowest) as lowest_salary,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary)::int as median_salary,
+      MIN(salary)::int as min_salary,
+      MAX(salary)::int as max_salary
+    FROM salary_data
+  `);
+
+  const stats = result.rows[0];
+  return {
+    highestRole: stats.highest_role || 'N/A',
+    highestSalary: Number(stats.highest_salary || 0),
+    lowestRole: stats.lowest_role || 'N/A',
+    lowestSalary: Number(stats.lowest_salary || 0),
+    medianSalary: Number(stats.median_salary || 0),
+    minSalary: Number(stats.min_salary || 0),
+    maxSalary: Number(stats.max_salary || 0),
+  };
+}
+
+export async function getRecentPostings(limit = 10) {
+  return await db
+    .select({
+      job_id: postings.job_id,
+      title: postings.title,
+      company_name: postings.company_name,
+      location: postings.location,
+      min_salary: postings.yearly_min_salary,
+      max_salary: postings.yearly_max_salary,
+      listed_time: postings.listed_time,
+    })
+    .from(postings)
+    .orderBy(desc(postings.listed_time))
+    .limit(limit);
 }
