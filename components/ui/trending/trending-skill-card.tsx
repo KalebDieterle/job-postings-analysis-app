@@ -52,7 +52,7 @@ export function TrendingSkillCard({
         <div className="absolute top-3 right-3 z-10">
           <Badge
             variant="default"
-            className="bg-gradient-to-r from-orange-500 to-red-500 text-white border-0 gap-1 shadow-lg"
+            className="bg-linear-to-r from-orange-500 to-red-500 text-white border-0 gap-1 shadow-lg"
           >
             <Flame className="h-3 w-3" />
             Breakout
@@ -159,8 +159,8 @@ export function TrendingSkillCard({
               className={cn(
                 "h-full rounded-full transition-all duration-500",
                 isPositive
-                  ? "bg-gradient-to-r from-green-400 to-emerald-500"
-                  : "bg-gradient-to-r from-red-400 to-orange-500",
+                  ? "bg-linear-to-r from-green-400 to-emerald-500"
+                  : "bg-linear-to-r from-red-400 to-orange-500",
               )}
               style={{
                 width: `${Math.min(Math.abs(growthPercentage), 100)}%`,

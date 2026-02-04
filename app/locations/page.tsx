@@ -363,7 +363,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
                       <div className="space-y-4">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="flex-shrink-0">
+                            <div className="shrink-0">
                               <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
                                 <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                               </div>
