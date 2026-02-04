@@ -86,25 +86,6 @@ export async function getRecentJobs(limit = 10) {
   return results;
 }
 
-// ===========================
-// Trending skills
-// ===========================
-export async function getTrendingSkills(limit = 10) {
-  const results = await db
-    .select({
-      skill_name: skills.skill_name,
-      skill_abr: job_skills.skill_abr,
-      count: count(),
-    })
-    .from(job_skills)
-    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
-    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
-    .groupBy(job_skills.skill_abr, skills.skill_name)
-    .orderBy(desc(count()))
-    .limit(limit);
-  return results;
-}
-
 export async function getTopJobRoles(
   limit: number,
   filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
@@ -984,4 +965,160 @@ export async function getRecentJobsByLocation(locationSlug: string, limit = 20) 
     )
     .orderBy(desc(postings.listed_time))
     .limit(limit);
+}
+
+// ===========================
+// Trending Skills with Growth Analysis
+// ===========================
+export async function getTrendingSkills(params: {
+  timeframe?: number; // days to look back (default 30)
+  limit?: number;
+  sortBy?: 'demand' | 'salary';
+}) {
+  const { timeframe = 30, limit = 24, sortBy = 'demand' } = params;
+  
+  const currentPeriodStart = Date.now() - (timeframe * 24 * 60 * 60 * 1000);
+  const previousPeriodStart = Date.now() - (2 * timeframe * 24 * 60 * 60 * 1000);
+  
+  // Get skills with their current and previous period metrics
+  const result = await db.execute<{
+    name: string;
+    current_count: number;
+    previous_count: number;
+    current_salary: number;
+    previous_salary: number;
+    growth_percentage: number;
+    salary_change: number;
+    trend_status: string;
+  }>(sql`
+    WITH current_period AS (
+      SELECT 
+        s.skill_name as name,
+        COUNT(*)::int as count,
+        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
+      FROM ${skills} s
+      LEFT JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
+      LEFT JOIN ${postings} p ON js.job_id = p.job_id
+      WHERE TO_TIMESTAMP(p.listed_time::numeric / 1000) >= TO_TIMESTAMP(${currentPeriodStart / 1000})
+      GROUP BY s.skill_name
+      HAVING COUNT(*) > 5
+    ),
+    previous_period AS (
+      SELECT 
+        s.skill_name as name,
+        COUNT(*)::int as count,
+        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
+      FROM ${skills} s
+      LEFT JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
+      LEFT JOIN ${postings} p ON js.job_id = p.job_id
+      WHERE TO_TIMESTAMP(p.listed_time::numeric / 1000) >= TO_TIMESTAMP(${previousPeriodStart / 1000})
+        AND TO_TIMESTAMP(p.listed_time::numeric / 1000) < TO_TIMESTAMP(${currentPeriodStart / 1000})
+      GROUP BY s.skill_name
+    )
+    SELECT 
+      c.name,
+      c.count as current_count,
+      COALESCE(p.count, 0)::int as previous_count,
+      c.avg_salary as current_salary,
+      COALESCE(p.avg_salary, 0)::float as previous_salary,
+      CASE 
+        WHEN COALESCE(p.count, 0) = 0 THEN 100.0
+        ELSE ((c.count - COALESCE(p.count, 0))::float / COALESCE(p.count, 1)::float * 100)
+      END as growth_percentage,
+      (c.avg_salary - COALESCE(p.avg_salary, 0))::float as salary_change,
+      CASE
+        WHEN COALESCE(p.count, 0) = 0 AND c.count > 10 THEN 'breakout'
+        WHEN ((c.count - COALESCE(p.count, 0))::float / COALESCE(p.count, 1)::float) > 0 THEN 'rising'
+        ELSE 'falling'
+      END as trend_status
+    FROM current_period c
+    LEFT JOIN previous_period p ON c.name = p.name
+    ORDER BY ${sortBy === 'salary' ? sql.raw('salary_change DESC') : sql.raw('growth_percentage DESC')}
+    LIMIT ${limit}
+  `);
+  
+  return result.rows.map(row => ({
+    name: row.name,
+    currentCount: Number(row.current_count),
+    previousCount: Number(row.previous_count),
+    currentSalary: Number(row.current_salary),
+    previousSalary: Number(row.previous_salary),
+    growthPercentage: Number(row.growth_percentage),
+    salaryChange: Number(row.salary_change),
+    trendStatus: row.trend_status as 'rising' | 'falling' | 'breakout',
+  }));
+}
+
+// ===========================
+// Trending Stats Overview
+// ===========================
+export async function getTrendingStats(timeframe = 30) {
+  const currentPeriodStart = Date.now() - (timeframe * 24 * 60 * 60 * 1000);
+  const previousPeriodStart = Date.now() - (2 * timeframe * 24 * 60 * 60 * 1000);
+  
+  const result = await db.execute<{
+    top_gainer: string;
+    top_gainer_growth: number;
+    avg_growth: number;
+    highest_salary_jump: string;
+    highest_salary_increase: number;
+    new_entries: number;
+  }>(sql`
+    WITH current_period AS (
+      SELECT 
+        s.skill_name as name,
+        COUNT(*)::int as count,
+        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
+      FROM ${skills} s
+      LEFT JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
+      LEFT JOIN ${postings} p ON js.job_id = p.job_id
+      WHERE TO_TIMESTAMP(p.listed_time::numeric / 1000) >= TO_TIMESTAMP(${currentPeriodStart / 1000})
+      GROUP BY s.skill_name
+      HAVING COUNT(*) > 5
+    ),
+    previous_period AS (
+      SELECT 
+        s.skill_name as name,
+        COUNT(*)::int as count,
+        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
+      FROM ${skills} s
+      LEFT JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
+      LEFT JOIN ${postings} p ON js.job_id = p.job_id
+      WHERE TO_TIMESTAMP(p.listed_time::numeric / 1000) >= TO_TIMESTAMP(${previousPeriodStart / 1000})
+        AND TO_TIMESTAMP(p.listed_time::numeric / 1000) < TO_TIMESTAMP(${currentPeriodStart / 1000})
+      GROUP BY s.skill_name
+    ),
+    growth_data AS (
+      SELECT 
+        c.name,
+        c.count as current_count,
+        COALESCE(p.count, 0) as previous_count,
+        c.avg_salary as current_salary,
+        COALESCE(p.avg_salary, 0) as previous_salary,
+        CASE 
+          WHEN COALESCE(p.count, 0) = 0 THEN 100.0
+          ELSE ((c.count - COALESCE(p.count, 0))::float / COALESCE(p.count, 1)::float * 100)
+        END as growth_percentage,
+        (c.avg_salary - COALESCE(p.avg_salary, 0)) as salary_change
+      FROM current_period c
+      LEFT JOIN previous_period p ON c.name = p.name
+    )
+    SELECT 
+      (SELECT name FROM growth_data ORDER BY growth_percentage DESC LIMIT 1) as top_gainer,
+      (SELECT growth_percentage FROM growth_data ORDER BY growth_percentage DESC LIMIT 1) as top_gainer_growth,
+      (SELECT AVG(growth_percentage) FROM growth_data WHERE growth_percentage > 0)::float as avg_growth,
+      (SELECT name FROM growth_data ORDER BY salary_change DESC LIMIT 1) as highest_salary_jump,
+      (SELECT salary_change FROM growth_data ORDER BY salary_change DESC LIMIT 1) as highest_salary_increase,
+      (SELECT COUNT(*) FROM growth_data WHERE previous_count = 0)::int as new_entries
+  `);
+  
+  const stats = result.rows[0];
+  return {
+    topGainer: stats?.top_gainer || 'N/A',
+    topGainerGrowth: Number(stats?.top_gainer_growth || 0),
+    avgGrowth: Number(stats?.avg_growth || 0),
+    highestSalaryJump: stats?.highest_salary_jump || 'N/A',
+    highestSalaryIncrease: Number(stats?.highest_salary_increase || 0),
+    newEntries: Number(stats?.new_entries || 0),
+  };
 }

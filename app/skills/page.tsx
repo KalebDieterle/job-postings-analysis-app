@@ -12,6 +12,7 @@ import Link from "next/link";
 import { Search, Download, Sparkles } from "lucide-react";
 import { Suspense } from "react";
 import { SkillsGridSkeleton } from "@/components/ui/skills/skills-grid-skeleton";
+import { categorizeSkill } from "@/lib/skill-helpers";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -54,54 +55,6 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
         )
       : 0;
   const topSkill = skillsData[0];
-
-  // Categorize skills (simple heuristic - you can enhance this)
-  const categorizeSkill = (name: string): string => {
-    const nameLower = name.toLowerCase();
-    if (
-      nameLower.includes("react") ||
-      nameLower.includes("vue") ||
-      nameLower.includes("angular")
-    )
-      return "Frontend";
-    if (
-      nameLower.includes("python") ||
-      nameLower.includes("java") ||
-      nameLower.includes("node")
-    )
-      return "Backend";
-    if (
-      nameLower.includes("aws") ||
-      nameLower.includes("docker") ||
-      nameLower.includes("kubernetes")
-    )
-      return "DevOps";
-    if (
-      nameLower.includes("sql") ||
-      nameLower.includes("mongo") ||
-      nameLower.includes("postgres")
-    )
-      return "Database";
-    if (
-      nameLower.includes("ios") ||
-      nameLower.includes("android") ||
-      nameLower.includes("mobile")
-    )
-      return "Mobile";
-    if (
-      nameLower.includes("cloud") ||
-      nameLower.includes("azure") ||
-      nameLower.includes("gcp")
-    )
-      return "Cloud";
-    if (
-      nameLower.includes("ml") ||
-      nameLower.includes("ai") ||
-      nameLower.includes("pytorch")
-    )
-      return "AI";
-    return "Technology";
-  };
 
   return (
     <>
