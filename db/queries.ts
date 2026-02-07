@@ -1,7 +1,7 @@
 import { db } from './index';
 import { 
   companies, skills, job_skills, job_industries, industries, 
-  roleAliases, top_companies, postings, employee_counts 
+  roleAliases, top_companies, postings, employee_counts, company_industries 
 } from './schema';
 import { 
   eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull 
@@ -9,6 +9,27 @@ import {
 
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
+
+/**
+ * Get the date range for the most recent N days of data in the dataset.
+ * Uses the max posting date as anchor instead of today's date.
+ */
+async function getMostRecentDateRange(days: number = 30) {
+  const maxDate = await db
+    .select({
+      max_date: sql<string>`max(to_timestamp(${postings.listed_time}::double precision / 1000))`,
+    })
+    .from(postings);
+
+  const mostRecentDate = maxDate[0]?.max_date
+    ? new Date(maxDate[0].max_date)
+    : new Date();
+
+  const startDate = new Date(mostRecentDate);
+  startDate.setDate(startDate.getDate() - days);
+
+  return { startDate, endDate: mostRecentDate };
+}
 
 // ===========================
 // Database stats
@@ -510,6 +531,7 @@ export async function getAllCompanyData({
   return await db
     .with(topCompaniesCte)
     .select({
+      company_id: topCompaniesCte.company_id,
       name: topCompaniesCte.name,
       country: companies.country,
       company_size: sql<number>`MAX(${employee_counts.employee_count})`,
@@ -518,7 +540,7 @@ export async function getAllCompanyData({
     .from(topCompaniesCte)
     .leftJoin(companies, eq(topCompaniesCte.company_id, companies.company_id))
     .leftJoin(employee_counts, eq(companies.company_id, employee_counts.company_id))
-    .groupBy(topCompaniesCte.name, companies.country, topCompaniesCte.postings_count)
+    .groupBy(topCompaniesCte.company_id, topCompaniesCte.name, companies.country, topCompaniesCte.postings_count)
     .orderBy(desc(topCompaniesCte.postings_count));
 }
 
@@ -1627,4 +1649,604 @@ export async function getRecentPostings(limit = 10) {
     .from(postings)
     .orderBy(desc(postings.listed_time))
     .limit(limit);
+}
+
+// ===========================
+// Enhanced Skills Queries for Analytics
+// ===========================
+
+export async function getSkillsWithFilters(params: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  category?: string[];
+  demandMin?: number;
+  demandMax?: number;
+  salaryMin?: number;
+  salaryMax?: number;
+  experience?: string[];
+  sort?: 'demand' | 'salary' | 'name' | 'trending' | 'growth';
+}) {
+  const {
+    page = 1,
+    limit = 24,
+    search = "",
+    category = [],
+    demandMin = 0,
+    demandMax = 100000,
+    salaryMin = 0,
+    salaryMax = 1000000,
+    sort = "demand",
+  } = params;
+  const offset = (page - 1) * limit;
+
+  const conditions = [];
+
+  if (search) {
+    conditions.push(ilike(skills.skill_name, `%${search}%`));
+  }
+
+  // Build the base query
+  let query = db
+    .select({
+      name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+    })
+    .from(skills)
+    .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .leftJoin(postings, eq(job_skills.job_id, postings.job_id));
+
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+
+  query = query.groupBy(skills.skill_name) as any;
+
+  // Apply HAVING clauses for demand and salary filters
+  query = query.having(
+    and(
+      sql`count(*) >= ${demandMin}`,
+      sql`count(*) <= ${demandMax}`,
+      sql`coalesce(avg(${postings.yearly_min_salary}), 0) >= ${salaryMin}`,
+      sql`coalesce(avg(${postings.yearly_min_salary}), 0) <= ${salaryMax}`
+    )
+  ) as any;
+
+  // Apply sorting
+  switch (sort) {
+    case "salary":
+      query = query.orderBy(desc(sql`coalesce(avg(${postings.yearly_min_salary}), 0)`)) as any;
+      break;
+    case "name":
+      query = query.orderBy(skills.skill_name) as any;
+      break;
+    case "demand":
+    default:
+      query = query.orderBy(desc(sql`count(*)`)) as any;
+      break;
+  }
+
+  query = query.limit(limit).offset(offset) as any;
+
+  return await query;
+}
+
+export async function getTrendingSkillsData(params: {
+  days?: number;
+  minGrowth?: number;
+  limit?: number;
+}) {
+  const { days = 30, minGrowth = 20, limit = 20 } = params;
+
+  // Calculate the date threshold
+  const daysAgo = new Date();
+  daysAgo.setDate(daysAgo.getDate() - days);
+
+  const twoPeriodsAgo = new Date();
+  twoPeriodsAgo.setDate(twoPeriodsAgo.getDate() - days * 2);
+
+  // Get recent period skill counts
+  const recentCounts = await db
+    .select({
+      skill_name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(gte(postings.listed_time, daysAgo))
+    .groupBy(skills.skill_name);
+
+  // Get previous period skill counts
+  const previousCounts = await db
+    .select({
+      skill_name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(and(gte(postings.listed_time, twoPeriodsAgo), lt(postings.listed_time, daysAgo)))
+    .groupBy(skills.skill_name);
+
+  // Calculate growth
+  const skillGrowth = recentCounts.map((recent) => {
+    const previous = previousCounts.find((p) => p.skill_name === recent.skill_name);
+    const prevCount = previous?.count || 0;
+    const recentCount = recent.count;
+    const growth =
+      prevCount > 0 ? ((recentCount - prevCount) / prevCount) * 100 : 100;
+
+    return {
+      skill_name: recent.skill_name,
+      recent_count: recentCount,
+      previous_count: prevCount,
+      growth_percentage: Math.round(growth * 10) / 10,
+    };
+  });
+
+  // Filter by minimum growth and sort
+  return skillGrowth
+    .filter((s) => s.growth_percentage >= minGrowth)
+    .sort((a, b) => b.growth_percentage - a.growth_percentage)
+    .slice(0, limit);
+}
+
+export async function getHighPayingSkills(params: {
+  minSalary?: number;
+  limit?: number;
+}) {
+  const { minSalary = 120000, limit = 20 } = params;
+
+  return await db
+    .select({
+      name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+    })
+    .from(skills)
+    .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .leftJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .groupBy(skills.skill_name)
+    .having(sql`coalesce(avg(${postings.yearly_min_salary}), 0) >= ${minSalary}`)
+    .orderBy(desc(sql`coalesce(avg(${postings.yearly_min_salary}), 0)`))
+    .limit(limit);
+}
+
+export async function getEmergingSkills(limit = 20) {
+  // Skills tagged as emerging tech (AI/ML, blockchain, quantum, etc.)
+  const emergingKeywords = [
+    '%AI%',
+    '%Machine Learning%',
+    '%Deep Learning%',
+    '%Neural Network%',
+    '%TensorFlow%',
+    '%PyTorch%',
+    '%Blockchain%',
+    '%Quantum%',
+    '%GPT%',
+    '%LLM%',
+    '%Transformer%',
+    '%Diffusion%',
+    '%Stable Diffusion%',
+    '%Langchain%',
+    '%Vector Database%',
+    '%Web3%',
+    '%Cryptocurrency%',
+  ];
+
+  // Build OR conditions for ILIKE
+  const conditions = emergingKeywords.map((keyword) =>
+    ilike(skills.skill_name, keyword)
+  );
+
+  return await db
+    .select({
+      name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+    })
+    .from(skills)
+    .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .leftJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(sql`(${sql.join(conditions, sql.raw(' OR '))})`)
+    .groupBy(skills.skill_name)
+    .orderBy(desc(sql`count(*)`))
+    .limit(limit);
+}
+
+export async function getSkillGrowthStats() {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const sixtyDaysAgo = new Date();
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+  // Get recent 30 days
+  const recentSkills = await db
+    .select({
+      skill_name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(gte(postings.listed_time, thirtyDaysAgo))
+    .groupBy(skills.skill_name);
+
+  // Get 30-60 days ago
+  const previousSkills = await db
+    .select({
+      skill_name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(and(gte(postings.listed_time, sixtyDaysAgo), lt(postings.listed_time, thirtyDaysAgo)))
+    .groupBy(skills.skill_name);
+
+  // Calculate growth for all skills
+  const growthMap = new Map();
+
+  recentSkills.forEach((recent) => {
+    const previous = previousSkills.find((p) => p.skill_name === recent.skill_name);
+    const prevCount = previous?.count || 0;
+    const recentCount = recent.count;
+    const growth =
+      prevCount > 0 ? ((recentCount - prevCount) / prevCount) * 100 : 100;
+
+    growthMap.set(recent.skill_name, {
+      skill_name: recent.skill_name,
+      growth_percentage: Math.round(growth * 10) / 10,
+      recent_count: recentCount,
+      previous_count: prevCount,
+    });
+  });
+
+  return Array.from(growthMap.values());
+}
+
+export async function getSkillTimeline(params: {
+  skillNames: string[];
+  days?: number;
+}) {
+  const { skillNames, days = 90 } = params;
+
+  const { startDate: daysAgo } = await getMostRecentDateRange(days);
+
+  return await db
+    .select({
+      skill_name: skills.skill_name,
+      day: sql<string>`date_trunc('day', to_timestamp(${postings.listed_time}::double precision / 1000))::text`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(
+      and(
+        sql`to_timestamp(${postings.listed_time}::double precision / 1000) >= ${daysAgo.toISOString()}::timestamp`,
+        inArray(
+          skills.skill_name,
+          skillNames.map((n) => n)
+        )
+      )
+    )
+    .groupBy(
+      skills.skill_name,
+      sql`date_trunc('day', to_timestamp(${postings.listed_time}::double precision / 1000))`
+    )
+    .orderBy(sql`date_trunc('day', to_timestamp(${postings.listed_time}::double precision / 1000)) ASC`);
+}
+
+export async function getCategoryDistribution() {
+  // This would ideally use a category column in the skills table
+  // For now, we'll return the top skills grouped by demand tiers
+  const allSkills = await db
+    .select({
+      name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(skills)
+    .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .groupBy(skills.skill_name)
+    .orderBy(desc(sql`count(*)`))
+    .limit(100);
+
+  // Simple categorization based on skill name patterns
+  const categories = {
+    'Programming Languages': 0,
+    'Frameworks & Libraries': 0,
+    'Databases & Data': 0,
+    'DevOps & Cloud': 0,
+    'Tools & Platforms': 0,
+    'AI/ML & Data Science': 0,
+  };
+
+  allSkills.forEach((skill) => {
+    const name = skill.name.toLowerCase();
+    if (
+      name.includes('python') ||
+      name.includes('java') ||
+      name.includes('javascript') ||
+      name.includes('typescript') ||
+      name.includes('c++') ||
+      name.includes('c#') ||
+      name.includes('go') ||
+      name.includes('rust') ||
+      name.includes('ruby') ||
+      name.includes('php')
+    ) {
+      categories['Programming Languages']++;
+    } else if (
+      name.includes('react') ||
+      name.includes('angular') ||
+      name.includes('vue') ||
+      name.includes('node') ||
+      name.includes('django') ||
+      name.includes('flask') ||
+      name.includes('spring') ||
+      name.includes('.net')
+    ) {
+      categories['Frameworks & Libraries']++;
+    } else if (
+      name.includes('sql') ||
+      name.includes('postgres') ||
+      name.includes('mysql') ||
+      name.includes('mongo') ||
+      name.includes('redis') ||
+      name.includes('elasticsearch') ||
+      name.includes('database')
+    ) {
+      categories['Databases & Data']++;
+    } else if (
+      name.includes('docker') ||
+      name.includes('kubernetes') ||
+      name.includes('aws') ||
+      name.includes('azure') ||
+      name.includes('gcp') ||
+      name.includes('terraform') ||
+      name.includes('jenkins') ||
+      name.includes('ci/cd') ||
+      name.includes('devops')
+    ) {
+      categories['DevOps & Cloud']++;
+    } else if (
+      name.includes('git') ||
+      name.includes('jira') ||
+      name.includes('figma') ||
+      name.includes('tableau') ||
+      name.includes('power bi')
+    ) {
+      categories['Tools & Platforms']++;
+    } else if (
+      name.includes('machine learning') ||
+      name.includes('ai') ||
+      name.includes('tensorflow') ||
+      name.includes('pytorch') ||
+      name.includes('data science') ||
+      name.includes('pandas') ||
+      name.includes('numpy')
+    ) {
+      categories['AI/ML & Data Science']++;
+    }
+  });
+
+  return Object.entries(categories).map(([category, count]) => ({
+    category,
+    count,
+  }));
+}
+
+export async function getSkillsAdvancedStats() {
+  const { startDate: thirtyDaysAgo } = await getMostRecentDateRange(30);
+
+  // Total skills tracked
+  const totalSkills = await db
+    .select({ count: sql<number>`count(distinct ${skills.skill_name})::int` })
+    .from(skills);
+
+  // Average demand (jobs per skill)
+const avgDemandData = await db
+  .select({
+    total_jobs: sql<number>`count(*)::int`,
+    unique_skills: sql<number>`count(distinct ${job_skills.skill_abr})::int`,
+  })
+  .from(job_skills);
+
+const avgDemandValue = avgDemandData[0]?.unique_skills 
+  ? Math.round(avgDemandData[0].total_jobs / avgDemandData[0].unique_skills)
+  : 0;
+
+  // Average salary across all skills
+  const avgSalary = await db
+    .select({
+      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+    })
+    .from(postings)
+    .where(isNotNull(postings.yearly_min_salary));
+
+  // Most in-demand skill
+  const topSkill = await db
+    .select({
+      name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .groupBy(skills.skill_name)
+    .orderBy(desc(sql`count(*)`))
+    .limit(1);
+
+  // Skills added this month (approximation based on first appearance)
+  const newSkills = await db
+    .select({
+      count: sql<number>`count(distinct ${skills.skill_name})::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(
+      sql`to_timestamp(${postings.listed_time}::double precision / 1000) >= ${thirtyDaysAgo.toISOString()}::timestamp`
+    );
+
+  // Fastest growing skill
+  const growthStats = await getSkillGrowthStats();
+  const fastestGrowing = growthStats.sort(
+    (a, b) => b.growth_percentage - a.growth_percentage
+  )[0];
+
+  // Highest paid skill
+  const highestPaid = await db
+    .select({
+      name: skills.skill_name,
+      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .where(isNotNull(postings.yearly_min_salary))
+    .groupBy(skills.skill_name)
+    .orderBy(desc(sql`coalesce(avg(${postings.yearly_min_salary}), 0)`))
+    .limit(1);
+
+  // Most versatile skill (appears in most diverse roles)
+  const mostVersatile = await db
+    .select({
+      name: skills.skill_name,
+      role_count: sql<number>`count(distinct ${postings.title})::int`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
+    .groupBy(skills.skill_name)
+    .orderBy(desc(sql`count(distinct ${postings.title})`))
+    .limit(1);
+
+  return {
+    totalSkills: Number(totalSkills[0]?.count || 0),
+    avgDemand: avgDemandValue,
+    avgSalary: Math.round(Number(avgSalary[0]?.avg_salary || 0)),
+    topSkill: topSkill[0]?.name || 'N/A',
+    topSkillCount: topSkill[0]?.count || 0,
+    newSkills: Number(newSkills[0]?.count || 0),
+    fastestGrowingSkill: fastestGrowing?.skill_name || 'N/A',
+    fastestGrowthRate: fastestGrowing?.growth_percentage || 0,
+    highestPaidSkill: highestPaid[0]?.name || 'N/A',
+    highestPaidSalary: Math.round(Number(highestPaid[0]?.avg_salary || 0)),
+    mostVersatileSkill: mostVersatile[0]?.name || 'N/A',
+    mostVersatileRoleCount: mostVersatile[0]?.role_count || 0,
+  };
+}
+
+export async function getRelatedSkillsEnhanced(skillName: string, limit = 10) {
+  const skillLower = skillName.toLowerCase();
+
+  // Get job IDs that require this skill
+  const jobIdsResult = await db
+    .select({ job_id: job_skills.job_id })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .where(sql`lower(${skills.skill_name}) = ${skillLower}`);
+
+  const jobIds = jobIdsResult.map((r) => r.job_id);
+  if (jobIds.length === 0) return [];
+
+  // Find skills that commonly appear with this skill
+  return await db
+    .select({
+      name: skills.skill_name,
+      count: sql<number>`count(*)::int`,
+      co_occurrence_rate: sql<number>`(count(*)::float / ${jobIds.length} * 100)::float`,
+    })
+    .from(job_skills)
+    .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
+    .where(
+      and(
+        inArray(job_skills.job_id, jobIds),
+        not(sql`lower(${skills.skill_name}) = ${skillLower}`)
+      )
+    )
+    .groupBy(skills.skill_name)
+    .orderBy(desc(sql`count(*)`))
+    .limit(limit);
+}
+
+// ===========================
+// Companies Page Enhancements
+// ===========================
+
+export async function getCompaniesHeroStats() {
+  // Total companies
+  const totalCompanies = await db
+    .select({ count: sql<number>`count(distinct ${companies.company_id})::int` })
+    .from(companies);
+
+  // Average postings per company
+  const avgPostings = await db.execute(sql`
+    SELECT round(avg(posting_count))::int as avg
+    FROM (
+      SELECT count(*)::int as posting_count
+      FROM ${postings}
+      GROUP BY company_id
+    ) company_counts
+  `);
+
+  const avgPostingsValue = Number(avgPostings.rows[0]?.avg || 0);
+
+  // Highest paying company
+  const highestPaying = await db
+    .select({
+      name: companies.name,
+      avg_salary: sql<number>`round(avg(${postings.yearly_min_salary}))::int`,
+    })
+    .from(postings)
+    .innerJoin(companies, eq(postings.company_id, companies.company_id))
+    .where(isNotNull(postings.yearly_min_salary))
+    .groupBy(companies.name)
+    .orderBy(desc(sql`avg(${postings.yearly_min_salary})`))
+    .limit(1);
+
+  // Most active industry
+  const topIndustry = await db
+    .select({
+      industry: company_industries.industry,
+      count: sql<number>`count(distinct ${postings.job_id})::int`,
+    })
+    .from(company_industries)
+    .innerJoin(postings, eq(company_industries.company_id, postings.company_id))
+    .groupBy(company_industries.industry)
+    .orderBy(desc(sql`count(distinct ${postings.job_id})`))
+    .limit(1);
+
+  return {
+    totalCompanies: totalCompanies[0]?.count || 0,
+    avgPostings: avgPostingsValue,
+    highestPayingCompany: highestPaying[0]?.name || 'N/A',
+    highestPayingSalary: highestPaying[0]?.avg_salary || 0,
+    mostActiveIndustry: topIndustry[0]?.industry || 'N/A',
+    mostActiveIndustryCount: topIndustry[0]?.count || 0,
+  };
+}
+
+export async function getCompanyComparisonData(companyIds: string[]) {
+  if (companyIds.length === 0) return [];
+  
+  return await db
+    .select({
+      company_id: companies.company_id,
+      name: companies.name,
+      location: sql<string>`concat(coalesce(${companies.city}, ''), ', ', coalesce(${companies.country}, ''))`,
+      company_size: companies.company_size,
+      posting_count: sql<number>`count(distinct ${postings.job_id})::int`,
+      avg_salary: sql<number>`round(coalesce(avg(${postings.yearly_min_salary}), 0))::int`,
+      industry_count: sql<number>`count(distinct ${company_industries.industry})::int`,
+    })
+    .from(companies)
+    .leftJoin(postings, eq(companies.company_id, postings.company_id))
+    .leftJoin(company_industries, eq(companies.company_id, company_industries.company_id))
+    .where(inArray(companies.company_id, companyIds))
+    .groupBy(companies.company_id, companies.name, companies.city, companies.country, companies.company_size);
 }

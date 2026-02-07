@@ -307,4 +307,20 @@
   }
   50% {
     box-shadow: 0 0 40px oklch(0.623 0.214 259 / 40%);
-  }}
+  }
+}
+
+/* ========================================
+   BACKGROUND PATTERNS
+   ======================================== */
+.bg-grid-slate-100 {
+  background-image: linear-gradient(to right, rgb(241 245 249 / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(241 245 249 / 0.5) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bg-grid-slate-800 {
+  background-image: linear-gradient(to right, rgb(30 41 59 / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(30 41 59 / 0.5) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

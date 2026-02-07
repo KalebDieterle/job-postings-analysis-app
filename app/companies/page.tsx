@@ -3,6 +3,8 @@ import { CompanyOverview } from "@/components/ui/company-overview";
 import { CompanyAvgSalaryGraph } from "@/components/ui/charts/company-avg-salary-graph";
 import { CompanyCard } from "@/components/ui/company-card";
 import { FilterBar } from "@/components/ui/filters/filter-bar";
+import { HeroStatsDashboard } from "@/components/ui/companies/hero-stats-dashboard";
+import { ComparisonPanelWrapper } from "@/components/ui/companies/comparison-panel-wrapper";
 
 import { searchParamsCache } from "@/lib/search-params";
 import { slugify } from "@/lib/slugify";
@@ -12,6 +14,7 @@ import {
   getAverageCompanySalary,
   getTopCompaniesBySize,
   getAvgSalaryPerEmployeeForTop10Fortune,
+  getCompaniesHeroStats,
 } from "@/db/queries";
 
 import { Suspense } from "react";
@@ -24,22 +27,27 @@ type PageProps = {
 
 export default async function CompaniesPage({ searchParams }: PageProps) {
   const filters = await searchParamsCache.parse(searchParams);
-  const page = typeof filters.page === "string" ? parseInt(filters.page) : filters.page || 1;
+  const page =
+    typeof filters.page === "string"
+      ? parseInt(filters.page)
+      : filters.page || 1;
   const limit = 50;
   const offset = (page - 1) * limit;
 
   // Parallel data fetching - all queries run simultaneously
-  const [companiesRaw, salaryResults, , fortuneResults] = await Promise.all([
-    getAllCompanyData({
-      limit, // Query already handles limit + 1 internally
-      offset,
-      search: filters.q,
-      location: filters.location,
-    }),
-    getAverageCompanySalary(),
-    getTopCompaniesBySize(),
-    getAvgSalaryPerEmployeeForTop10Fortune(),
-  ]);
+  const [companiesRaw, salaryResults, , fortuneResults, heroStats] =
+    await Promise.all([
+      getAllCompanyData({
+        limit, // Query already handles limit + 1 internally
+        offset,
+        search: filters.q,
+        location: filters.location,
+      }),
+      getAverageCompanySalary(),
+      getTopCompaniesBySize(),
+      getAvgSalaryPerEmployeeForTop10Fortune(),
+      getCompaniesHeroStats(),
+    ]);
 
   // Database query returns limit+1 rows to check for next page
   const hasNextPage = companiesRaw.length > limit;
@@ -47,14 +55,12 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
   // Process companies (take only 'limit' items, not limit+1)
   // No filtering needed since query now filters at database level
-  const companies = companiesRaw
-    .slice(0, limit)
-    .map((company: any) => ({
-      ...company,
-      postings_count: Number(company.postings_count ?? 0),
-      company_size: company.company_size?.toString() || "N/A",
-      slug: slugify(company.name ?? ""),
-    }));
+  const companies = companiesRaw.slice(0, limit).map((company: any) => ({
+    ...company,
+    postings_count: Number(company.postings_count ?? 0),
+    company_size: company.company_size?.toString() || "N/A",
+    slug: slugify(company.name ?? ""),
+  }));
 
   const salaryData = salaryResults.slice(0, 10).map((row: any) => ({
     company: row.company,
@@ -89,6 +95,9 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
           </h1>
         </div>
       </div>
+
+      {/* Hero Stats Dashboard */}
+      <HeroStatsDashboard stats={heroStats} />
 
       {/* Search Bar */}
       <FilterBar />
@@ -147,25 +156,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         <h2 className="text-xl font-bold">Top Companies</h2>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        {companies.map((company: any, index: number) => (
-          <Link
-            key={`${company.name}-${offset + index}`}
-            href={`/companies/${company.slug}`}
-            className="group"
-          >
-            <div className="rounded-2xl border bg-card p-4 hover:shadow-lg transition-shadow h-full">
-              <CompanyCard
-                name={company.name || "N/A"}
-                size={company.company_size}
-                country={company.country || "N/A"}
-                rank={offset + index + 1}
-                count={company.postings_count}
-              />
-            </div>
-          </Link>
-        ))}
-      </div>
+      <ComparisonPanelWrapper companies={companies} offset={offset} />
 
       {/* Pagination Controls */}
       {(hasNextPage || hasPrevPage) && (

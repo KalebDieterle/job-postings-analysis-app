@@ -5,7 +5,8 @@ import { ThemeProvider } from "@/components/ui/providers/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/ui/app-sidebar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
-import { NuqsAdapter } from "nuqs/adapters/next/app"; // Import for Step 4
+import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -59,6 +60,7 @@ export default function RootLayout({
               </main>
             </SidebarProvider>
           </NuqsAdapter>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
