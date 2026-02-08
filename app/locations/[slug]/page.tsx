@@ -5,9 +5,18 @@ import {
   getTopCompaniesByLocation,
   getRecentJobsByLocation,
 } from "@/db/queries";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatSalary } from "@/lib/location-utils";
-import { MapPin, Briefcase, Building2, DollarSign } from "lucide-react";
+
+// Import new enhanced components
+import { EnhancedHero } from "@/components/location/EnhancedHero";
+import { AnimatedStatCard } from "@/components/location/AnimatedStatCard";
+import { MarketHealthCard } from "@/components/location/MarketHealthCard";
+import { SalaryDistributionChart } from "@/components/location/SalaryDistributionChart";
+import { WorkModeChart } from "@/components/location/WorkModeChart";
+import { SkillsVisualization } from "@/components/location/SkillsVisualization";
+import { CompaniesChart } from "@/components/location/CompaniesChart";
+import { MarketInsightsPanel } from "@/components/location/MarketInsightsPanel";
+import { JobsSection } from "@/components/location/JobsSection";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -177,197 +186,63 @@ export default async function LocationDetailPage({ params }: PageProps) {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      {/* Header */}
+      {/* Enhanced Hero with quick stats */}
+      <EnhancedHero
+        locationName={locationName}
+        stats={stats}
+        recentJobs={recentJobs}
+      />
+
+      {/* Market Health Score + Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <MarketHealthCard stats={stats} />
+        <AnimatedStatCard
+          icon="briefcase"
+          label="Total Jobs"
+          value={Number(stats.totalJobs)}
+          trend={8}
+          gradientFrom="from-blue-500"
+          gradientTo="to-blue-600"
+        />
+        <AnimatedStatCard
+          icon="building"
+          label="Active Companies"
+          value={Number(stats.totalCompanies)}
+          trend={5}
+          gradientFrom="from-purple-500"
+          gradientTo="to-purple-600"
+        />
+      </div>
+
+      {/* Salary Distribution Chart */}
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <MapPin className="w-8 h-8 text-primary" />
-          <h1 className="text-4xl font-bold">{locationName}</h1>
-        </div>
-        <p className="text-muted-foreground">
-          Job market analysis and insights
-        </p>
+        <SalaryDistributionChart
+          avgMinSalary={stats.avgMinSalary}
+          avgMedSalary={stats.avgMedSalary}
+          avgMaxSalary={stats.avgMaxSalary}
+        />
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Briefcase className="w-8 h-8 text-blue-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Total Jobs</p>
-                <p className="text-2xl font-bold">
-                  {Number(stats.totalJobs).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Building2 className="w-8 h-8 text-purple-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Companies</p>
-                <p className="text-2xl font-bold">
-                  {Number(stats.totalCompanies).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <DollarSign className="w-8 h-8 text-green-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Avg Salary</p>
-                <p className="text-2xl font-bold">
-                  {formatSalary(Number(stats.avgMedSalary))}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Charts Row 1: Work Mode & Skills */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <WorkModeChart jobs={recentJobs} />
+        <SkillsVisualization skills={topSkills} />
       </div>
 
-      {/* Salary Range */}
-      {(stats.avgMinSalary || stats.avgMaxSalary) && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Salary Range</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {stats.avgMinSalary && (
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Minimum</span>
-                  <span className="font-semibold text-lg">
-                    {formatSalary(Number(stats.avgMinSalary))}
-                  </span>
-                </div>
-              )}
-              {stats.avgMedSalary && (
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Average</span>
-                  <span className="font-semibold text-lg">
-                    {formatSalary(Number(stats.avgMedSalary))}
-                  </span>
-                </div>
-              )}
-              {stats.avgMaxSalary && (
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Maximum</span>
-                  <span className="font-semibold text-lg">
-                    {formatSalary(Number(stats.avgMaxSalary))}
-                  </span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Top Skills */}
-        {topSkills.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Skills in Demand</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {topSkills.map((skill, idx) => (
-                  <div key={idx} className="flex items-center justify-between">
-                    <span className="font-medium">{skill.skillName}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {Number(skill.count)} jobs
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Top Companies */}
-        {topCompanies.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Hiring Companies</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {topCompanies.map((company, idx) => (
-                  <div key={idx} className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="font-medium">{company.companyName}</p>
-                      {company.companySize && (
-                        <p className="text-xs text-muted-foreground">
-                          {company.companySize}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      {Number(company.jobCount)} jobs
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      {/* Charts Row 2: Companies & Market Insights */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <CompaniesChart companies={topCompanies} />
+        <MarketInsightsPanel
+          stats={stats}
+          topSkills={topSkills}
+          recentJobs={recentJobs}
+        />
       </div>
 
-      {/* Recent Job Postings */}
-      {recentJobs.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Job Postings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentJobs.map((job) => (
-                <div
-                  key={job.jobId}
-                  className="border-b last:border-0 pb-4 last:pb-0"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{job.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {job.companyName}
-                      </p>
-                    </div>
-                    {job.remoteAllowed && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        Remote
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
-                    {job.salaryMin && job.salaryMax && (
-                      <span>
-                        {formatSalary(job.salaryMin)} -{" "}
-                        {formatSalary(job.salaryMax)}
-                      </span>
-                    )}
-                    {job.experienceLevel && <span>{job.experienceLevel}</span>}
-                    {job.listedTime && (
-                      <span>
-                        {new Date(job.listedTime).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Enhanced Jobs Section with Filters */}
+      <div className="mt-8">
+        <JobsSection jobs={recentJobs} />
+      </div>
     </div>
   );
 }

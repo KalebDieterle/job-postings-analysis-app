@@ -8,6 +8,11 @@ import { searchParamsCache } from "@/lib/search-params";
 import { Card, CardContent } from "@/components/ui/card";
 import { MapPin, Building2, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { QuickInsights } from "@/components/ui/locations/quick-insights";
+import { TopCitiesChart } from "@/components/ui/locations/top-cities-chart";
+import { MarketScatterPlot } from "@/components/ui/locations/market-scatter-plot";
+import { RegionalDistribution } from "@/components/ui/locations/regional-distribution";
+import { LocationsTabs } from "@/components/ui/locations/locations-tabs";
 
 export const metadata = {
   title: "Job Locations - Global Distribution",
@@ -308,8 +313,83 @@ export default async function LocationsPage({ searchParams }: PageProps) {
     return `/locations?${params.toString()}`;
   };
 
+  // Calculate Quick Insights Data
+  const locationsWithSalary = deduplicatedData.filter(
+    (loc) => loc.avgSalary && loc.avgSalary > 0,
+  );
+
+  const highestPayingLocation =
+    locationsWithSalary.length > 0
+      ? locationsWithSalary.reduce((max, loc) =>
+          (loc.avgSalary || 0) > (max.avgSalary || 0) ? loc : max,
+        )
+      : null;
+
+  const jobHotspot =
+    deduplicatedData.length > 0
+      ? deduplicatedData.reduce((max, loc) =>
+          (loc.jobCount || 0) > (max.jobCount || 0) ? loc : max,
+        )
+      : null;
+
+  const marketAverageSalary =
+    locationsWithSalary.length > 0
+      ? locationsWithSalary.reduce(
+          (sum, loc) => sum + (loc.avgSalary || 0),
+          0,
+        ) / locationsWithSalary.length
+      : 0;
+
+  const comparisonPercentage =
+    highestPayingLocation && marketAverageSalary
+      ? ((marketAverageSalary - highestPayingLocation.avgSalary) /
+          highestPayingLocation.avgSalary) *
+        100
+      : 0;
+
+  // Prepare data for Regional Distribution (by state)
+  const stateDistribution = new Map<string, number>();
+  filteredCityData.forEach((location: any) => {
+    const state = location.state || "Other";
+    const current = stateDistribution.get(state) || 0;
+    stateDistribution.set(state, current + (location.jobCount || 0));
+  });
+
+  const sortedStates = Array.from(stateDistribution.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const otherStatesTotal = Array.from(stateDistribution.entries())
+    .slice(5)
+    .reduce((sum, [, count]) => sum + count, 0);
+
+  const regionalTotal = totalJobs;
+  const regionalData = [
+    ...sortedStates.map(([name, value]) => ({
+      name,
+      value,
+      percentage: (value / regionalTotal) * 100,
+    })),
+    ...(otherStatesTotal > 0
+      ? [
+          {
+            name: "Others",
+            value: otherStatesTotal,
+            percentage: (otherStatesTotal / regionalTotal) * 100,
+          },
+        ]
+      : []),
+  ];
+
+  // Prepare data for charts with slugs
+  const chartReadyData = deduplicatedData.map((location: any) => ({
+    ...location,
+    slug: generateLocationSlug(location.city, location.state, location.country),
+  }));
+
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="max-w-2xl space-y-2">
           <h1 className="text-4xl font-black tracking-tight lg:text-5xl">
@@ -322,143 +402,188 @@ export default async function LocationsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
+      {/* Quick Insights */}
+      {highestPayingLocation && jobHotspot && (
+        <QuickInsights
+          highestPayingLocation={{
+            name: [highestPayingLocation.city, highestPayingLocation.state]
+              .filter(Boolean)
+              .join(", "),
+            salary: highestPayingLocation.avgSalary || 0,
+          }}
+          jobHotspot={{
+            name: [jobHotspot.city, jobHotspot.state]
+              .filter(Boolean)
+              .join(", "),
+            jobCount: jobHotspot.jobCount || 0,
+            trend: "up",
+          }}
+          marketAverage={{
+            avgSalary: marketAverageSalary,
+            comparison: comparisonPercentage,
+          }}
+        />
+      )}
+
       <FilterBar />
 
-      <StatsCards
-        totalJobs={totalJobs}
-        totalCities={filteredCityData.length}
-        totalCountries={countryData.length}
-      />
-
-      <GlobalHeatMapCard cityData={deduplicatedData} />
-
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">
-            {filters.q || filters.location
-              ? `Search Results${filters.q ? ` for "${filters.q}"` : ""}`
-              : "Top Locations"}
-          </h2>
-        </div>
-
-        {cityData.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {cityData.map((location: any, index: number) => {
-              const locationName = [
-                location.city,
-                location.state,
-                location.country,
-              ]
-                .filter(Boolean)
-                .join(", ");
-
-              return (
-                <Link
-                  key={`${location.slug}-${offset + index}`}
-                  href={`/locations/${location.slug}`}
-                  className="group"
-                >
-                  <Card className="hover:shadow-lg transition-shadow h-full">
-                    <CardContent className="pt-6">
-                      <div className="space-y-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="shrink-0">
-                              <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-                                <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                              </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-bold text-lg truncate group-hover:text-primary transition-colors">
-                                {locationName}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                #{offset + index + 1}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                Jobs
-                              </p>
-                              <p className="font-semibold">
-                                {Number(
-                                  location.jobCount || 0,
-                                ).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                          {location.avgSalary && (
-                            <div className="flex items-center gap-2">
-                              <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                              <div>
-                                <p className="text-xs text-muted-foreground">
-                                  Avg Salary
-                                </p>
-                                <p className="font-semibold">
-                                  $
-                                  {(Number(location.avgSalary) / 1000).toFixed(
-                                    0,
-                                  )}
-                                  k
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
-          <Card className="border-dashed border-2">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="rounded-full bg-muted p-4 mb-4">
-                <MapPin className="h-8 w-8 text-muted-foreground" />
+      {/* Tabbed Content */}
+      <LocationsTabs
+        dashboardContent={
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <StatsCards
+                  totalJobs={totalJobs}
+                  totalCities={filteredCityData.length}
+                  totalCountries={countryData.length}
+                />
               </div>
-              <h3 className="text-lg font-semibold mb-2">No locations found</h3>
-              <p className="text-muted-foreground text-center mb-4">
-                Try adjusting your search or filters to find what you're looking
-                for.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+              <div>
+                <RegionalDistribution data={regionalData} />
+              </div>
+            </div>
 
-      {(hasNextPage || hasPrevPage) && cityData.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800 gap-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Showing{" "}
-            <span className="font-bold text-slate-900 dark:text-white">
-              {offset + 1}
-            </span>{" "}
-            to{" "}
-            <span className="font-bold text-slate-900 dark:text-white">
-              {offset + cityData.length}
-            </span>{" "}
-            of{" "}
-            <span className="font-bold text-slate-900 dark:text-white">
-              {filteredCityData.length}
-            </span>{" "}
-            locations
-          </p>
-          <PaginationControls
-            currentPage={page}
-            hasNextPage={hasNextPage}
-            hasPrevPage={hasPrevPage}
-            buildPageUrl={buildPageUrl}
-          />
-        </div>
-      )}
+            <TopCitiesChart data={chartReadyData} />
+
+            <MarketScatterPlot data={chartReadyData} />
+          </>
+        }
+        browseContent={
+          <>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">
+                  {filters.q || filters.location
+                    ? `Search Results${filters.q ? ` for "${filters.q}"` : ""}`
+                    : "Top Locations"}
+                </h2>
+              </div>
+
+              {cityData.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cityData.map((location: any, index: number) => {
+                    const locationName = [
+                      location.city,
+                      location.state,
+                      location.country,
+                    ]
+                      .filter(Boolean)
+                      .join(", ");
+
+                    return (
+                      <Link
+                        key={`${location.slug}-${offset + index}`}
+                        href={`/locations/${location.slug}`}
+                        className="group"
+                      >
+                        <Card className="hover:shadow-lg transition-shadow h-full">
+                          <CardContent className="pt-6">
+                            <div className="space-y-4">
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className="shrink-0">
+                                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                                      <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <h3 className="font-bold text-lg truncate group-hover:text-primary transition-colors">
+                                      {locationName}
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground">
+                                      #{offset + index + 1}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">
+                                      Jobs
+                                    </p>
+                                    <p className="font-semibold">
+                                      {Number(
+                                        location.jobCount || 0,
+                                      ).toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                {location.avgSalary && (
+                                  <div className="flex items-center gap-2">
+                                    <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                                    <div>
+                                      <p className="text-xs text-muted-foreground">
+                                        Avg Salary
+                                      </p>
+                                      <p className="font-semibold">
+                                        $
+                                        {(
+                                          Number(location.avgSalary) / 1000
+                                        ).toFixed(0)}
+                                        k
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Card className="border-dashed border-2">
+                  <CardContent className="flex flex-col items-center justify-center py-16">
+                    <div className="rounded-full bg-muted p-4 mb-4">
+                      <MapPin className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">
+                      No locations found
+                    </h3>
+                    <p className="text-muted-foreground text-center mb-4">
+                      Try adjusting your search or filters to find what you're
+                      looking for.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {(hasNextPage || hasPrevPage) && cityData.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800 gap-4">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Showing{" "}
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {offset + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {offset + cityData.length}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {filteredCityData.length}
+                  </span>{" "}
+                  locations
+                </p>
+                <PaginationControls
+                  currentPage={page}
+                  hasNextPage={hasNextPage}
+                  hasPrevPage={hasPrevPage}
+                  buildPageUrl={buildPageUrl}
+                />
+              </div>
+            )}
+          </>
+        }
+        mapContent={<GlobalHeatMapCard cityData={deduplicatedData} />}
+      />
     </div>
   );
 }

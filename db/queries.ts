@@ -697,7 +697,7 @@ export async function getCompanyJobStats(companyName: string) {
       active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
       // UPDATED: Now uses yearly_min_salary
       avg_salary: avg(postings.yearly_min_salary),
-      remote_count: sql<number>`SUM(CASE WHEN ${postings.remote_allowed} = true THEN 1 ELSE 0 END)::int`,
+      remote_count: sql<number>`SUM(CASE WHEN ${postings.remote_allowed} IN ('1', 'true') THEN 1 ELSE 0 END)::int`,
     })
     .from(postings)
     .where(eq(postings.company_name, companyName));
