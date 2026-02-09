@@ -101,7 +101,6 @@ export async function getRecentJobs(limit = 10) {
       listed_time: postings.listed_time,
     })
     .from(postings)
-    .leftJoin(companies, eq(postings.company_id, companies.company_id))
     .orderBy(desc(postings.listed_time))
     .limit(limit);
   return results;
@@ -186,7 +185,7 @@ export async function getTopRolesTimeSeries(limit = 10) {
         COUNT(*)::int as count
       FROM ${postings} p
       LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
-      WHERE COALESCE(ra.canonical_name, p.title) = ANY(ARRAY[${sql.raw(topRoles.map(r => `'${r.replace(/'/g, "''")}'`).join(', '))}])
+      WHERE COALESCE(ra.canonical_name, p.title) = ANY(${topRoles})
       GROUP BY COALESCE(ra.canonical_name, p.title), DATE_TRUNC('day', TO_TIMESTAMP(p.listed_time::numeric / 1000))
       ORDER BY day ASC
     `);
@@ -824,7 +823,7 @@ export async function getJobsByLocation() {
       remoteCount: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as('remote_count'),
     })
     .from(postings)
-    .leftJoin(companies, eq(postings.company_id, companies.company_id))
+    .leftJoin(companies, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .where(isNotNull(postings.location))
     .groupBy(postings.location, companies.city, companies.state, companies.country)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`));
@@ -855,7 +854,7 @@ export async function getJobsByCity() {
     .from(companies)
     .innerJoin(
       postings,
-      eq(companies.company_id, sql`SPLIT_PART(${postings.company_id}, '.', 1)`)
+      sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`
     )
     .where(
       and(
@@ -884,7 +883,7 @@ export async function getJobsByCountry() {
       cities: sql<string[]>`array_agg(distinct ${companies.city})`.as('cities'),
     })
     .from(companies)
-    .innerJoin(postings, eq(companies.company_id, sql`SPLIT_PART(${postings.company_id}, '.', 1)`))
+    .innerJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .where(isNotNull(companies.country))
     .groupBy(companies.country)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`));
@@ -911,7 +910,7 @@ export async function getLocationStats(locationSlug: string) {
       totalApplies: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.applies}, ''), '0') AS numeric)) AS bigint))`.as("total_applies"),
     })
     .from(postings)
-    .leftJoin(companies, eq(postings.company_id, companies.company_id))
+    .leftJoin(companies, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .where(
       sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
     )
@@ -954,7 +953,7 @@ export async function getTopCompaniesByLocation(locationSlug: string, limit = 10
       companySize: companies.company_size,
     })
     .from(postings)
-    .innerJoin(companies, eq(postings.company_id, companies.company_id))
+    .innerJoin(companies, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .where(
       sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
     )
@@ -983,6 +982,7 @@ export async function getRecentJobsByLocation(locationSlug: string, limit = 20) 
       listedTime: postings.listed_time,
       remoteAllowed: postings.remote_allowed,
       experienceLevel: postings.formatted_experience_level,
+      jobPostingUrl: postings.job_posting_url,
     })
     .from(postings)
     .where(
@@ -2196,32 +2196,45 @@ export async function getCompaniesHeroStats() {
 
   const avgPostingsValue = Number(avgPostings.rows[0]?.avg || 0);
 
-  // Highest paying company
+  // Highest paying company - FIXED: Using company_name JOIN with sanity filters
   const highestPaying = await db
     .select({
       name: companies.name,
-      avg_salary: sql<number>`round(avg(${postings.yearly_min_salary}))::int`,
+      avg_salary: sql<number>`round(percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary}))::int`,
     })
-    .from(postings)
-    .innerJoin(companies, eq(postings.company_id, companies.company_id))
-    .where(isNotNull(postings.yearly_min_salary))
-    .groupBy(companies.name)
-    .orderBy(desc(sql`avg(${postings.yearly_min_salary})`))
+    .from(companies)
+    .innerJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
+    .where(
+      and(
+        isNotNull(postings.yearly_max_salary),
+        gt(postings.yearly_max_salary, 10000),
+        lt(postings.yearly_max_salary, 1500000)
+      )
+    )
+    .groupBy(companies.company_id, companies.name)
+    .having(sql`COUNT(${postings.job_id}) >= 5`)
+    .orderBy(desc(sql`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary})`))
     .limit(1);
 
-  // Most active industry
+  console.log('🔍 Hero Stats - Highest Paying:', highestPaying[0]);
+
+  // Most active industry - FIXED: Use company_name JOIN via companies table
   const topIndustry = await db
     .select({
       industry: company_industries.industry,
       count: sql<number>`count(distinct ${postings.job_id})::int`,
     })
     .from(company_industries)
-    .innerJoin(postings, eq(company_industries.company_id, postings.company_id))
+    .innerJoin(companies, eq(company_industries.company_id, companies.company_id))
+    .innerJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
+    .where(isNotNull(company_industries.industry))
     .groupBy(company_industries.industry)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`))
     .limit(1);
 
-  return {
+  console.log('🔍 Hero Stats - Top Industry:', topIndustry[0]);
+
+  const stats = {
     totalCompanies: totalCompanies[0]?.count || 0,
     avgPostings: avgPostingsValue,
     highestPayingCompany: highestPaying[0]?.name || 'N/A',
@@ -2229,24 +2242,43 @@ export async function getCompaniesHeroStats() {
     mostActiveIndustry: topIndustry[0]?.industry || 'N/A',
     mostActiveIndustryCount: topIndustry[0]?.count || 0,
   };
+
+  console.log('📊 Complete Hero Stats:', stats);
+
+  return stats;
 }
 
 export async function getCompanyComparisonData(companyIds: string[]) {
   if (companyIds.length === 0) return [];
   
-  return await db
+  console.log('🔍 Comparison Query - Company IDs:', companyIds);
+  
+  const results = await db
     .select({
       company_id: companies.company_id,
       name: companies.name,
-      location: sql<string>`concat(coalesce(${companies.city}, ''), ', ', coalesce(${companies.country}, ''))`,
+      location: sql<string>`CONCAT_WS(', ', ${companies.city}, ${companies.state}, ${companies.country})`,
       company_size: companies.company_size,
-      posting_count: sql<number>`count(distinct ${postings.job_id})::int`,
-      avg_salary: sql<number>`round(coalesce(avg(${postings.yearly_min_salary}), 0))::int`,
+      posting_count: sql<number>`count(${postings.job_id})::int`,
+      // FIXED: Using company_name JOIN with yearly_max_salary median and sanity filters
+      avg_salary: sql<number>`round(
+        percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY CASE 
+            WHEN ${postings.yearly_max_salary} > 10000 AND ${postings.yearly_max_salary} < 1500000 
+            THEN ${postings.yearly_max_salary} 
+            ELSE NULL 
+          END
+        )
+      )::int`,
       industry_count: sql<number>`count(distinct ${company_industries.industry})::int`,
     })
     .from(companies)
-    .leftJoin(postings, eq(companies.company_id, postings.company_id))
+    .leftJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .leftJoin(company_industries, eq(companies.company_id, company_industries.company_id))
     .where(inArray(companies.company_id, companyIds))
-    .groupBy(companies.company_id, companies.name, companies.city, companies.country, companies.company_size);
+    .groupBy(companies.company_id, companies.name, companies.city, companies.state, companies.country, companies.company_size);
+  
+  console.log('📊 Comparison Results:', results);
+  
+  return results;
 }

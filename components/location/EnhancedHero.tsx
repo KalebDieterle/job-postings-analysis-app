@@ -23,7 +23,9 @@ export function EnhancedHero({
   recentJobs,
 }: EnhancedHeroProps) {
   const remotePercentage = calculateRemotePercentage(recentJobs);
-  const jobsPerCompany = Number(stats.totalJobs) / Number(stats.totalCompanies);
+  const totalCompanies = Number(stats.totalCompanies);
+  const jobsPerCompany =
+    totalCompanies > 0 ? Number(stats.totalJobs) / totalCompanies : 0;
   const competition = getCompetitionLevel(jobsPerCompany);
 
   const containerVariants = {

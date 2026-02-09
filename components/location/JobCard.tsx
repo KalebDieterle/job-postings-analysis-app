@@ -18,6 +18,7 @@ interface JobCardProps {
     salaryMax?: number | null;
     experienceLevel?: string | null;
     listedTime?: Date | string | null;
+    jobPostingUrl?: string | null;
   };
 }
 
@@ -96,7 +97,21 @@ export function JobCard({ job }: JobCardProps) {
               <Button size="sm" variant="outline">
                 <Bookmark className="w-4 h-4" />
               </Button>
-              <Button size="sm">Apply</Button>
+              {job.jobPostingUrl ? (
+                <Button size="sm" asChild>
+                  <a
+                    href={job.jobPostingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View
+                  </a>
+                </Button>
+              ) : (
+                <Button size="sm" disabled>
+                  View
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

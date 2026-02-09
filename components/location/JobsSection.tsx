@@ -15,6 +15,7 @@ interface Job {
   salaryMax?: number | null;
   experienceLevel?: string | null;
   listedTime?: Date | string | null;
+  jobPostingUrl?: string | null;
 }
 
 interface JobsSectionProps {

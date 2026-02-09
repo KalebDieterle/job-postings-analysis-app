@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
 
 import {
   Sidebar,
@@ -80,10 +81,10 @@ export function AppSidebar() {
               {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -94,9 +95,8 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <div className="text-xs text-sidebar-foreground/60">
-          <p>123,849 job postings</p>
-          <p>24,473 companies</p>
-          <p className="mt-1 text-[10px]">Data updated: Jan 2024</p>
+          <p>Job Market Analytics</p>
+          <p className="mt-1 text-[10px]">Powered by LinkedIn data</p>
         </div>
       </SidebarFooter>
     </Sidebar>

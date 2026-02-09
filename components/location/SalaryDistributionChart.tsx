@@ -110,9 +110,7 @@ export function SalaryDistributionChart({
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-muteshape={<CustomBar />">
-            No salary data available
-          </p>
+          <p className="text-muted-foreground">No salary data available</p>
         </CardContent>
       </Card>
     );

@@ -37,37 +37,21 @@ export default async function CompanySlugPage({ params }: PageProps) {
   try {
     company = await getCompanyBySlug(slug);
   } catch (error) {
-    return (
-      <div className="p-10 bg-red-950 text-white">
-        <h1 className="text-2xl font-bold">Database Connection Error</h1>
-        <pre className="mt-4 p-4 bg-black/50 rounded text-xs overflow-auto">
-          {String(error)}
-        </pre>
-      </div>
-    );
+    console.error("Error fetching company:", error);
+    notFound();
   }
 
   if (!company) {
-    return (
-      <div className="p-10 text-white">
-        <h1 className="text-2xl font-bold">Company Not Found</h1>
-        <p>
-          No company found with slug:{" "}
-          <code className="bg-slate-800 px-2 py-1 rounded">{slug}</code>
-        </p>
-      </div>
-    );
+    notFound();
   }
 
-  // Fetch related stats
-  const jobStats = await getCompanyJobStats(company.name);
-  const topRoles = await getCompanyTopRoles(company.name);
-  const topSkills = await getCompanyTopSkills(company.name);
-  const recentJobs = await getCompanyRecentPostings(company.name);
-
-  // Cast some DB results to `any` for optional display fields not present in schema
-  const companyAny = company as any;
-  const jobStatsAny = jobStats as any;
+  // Fetch related stats in parallel
+  const [jobStats, topRoles, topSkills, recentJobs] = await Promise.all([
+    getCompanyJobStats(company.name),
+    getCompanyTopRoles(company.name),
+    getCompanyTopSkills(company.name),
+    getCompanyRecentPostings(company.name),
+  ]);
 
   // Compute remote percentage for display (show N/A when totals missing)
   const remotePercent = jobStats.total_postings
@@ -78,17 +62,17 @@ export default async function CompanySlugPage({ params }: PageProps) {
     : null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white py-8">
+    <div className="min-h-screen py-8">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Hero */}
         <section className="relative overflow-hidden rounded-xl glass-card min-h-55 p-8 flex items-end">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
               <span className="bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">
-                {companyAny.fortune_rank ? "Fortune 500" : "Company"}
+                Company
               </span>
-              <span className="text-sm text-slate-300">
-                {companyAny.headline || "Company Intelligence Profile"}
+              <span className="text-sm text-muted-foreground">
+                Company Intelligence Profile
               </span>
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight">
@@ -103,9 +87,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
               </div>
               <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
                 <Globe className="h-4 w-4 text-primary" />
-                <span className="text-sm">
-                  {companyAny.industry || "Industry"}
-                </span>
+                <span className="text-sm">{company.country || "Industry"}</span>
               </div>
             </div>
           </div>
@@ -139,9 +121,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
               <div className="text-3xl font-bold">
                 {jobStats.total_postings}
               </div>
-              <div className="text-sm text-emerald-400 mt-1">
-                {jobStatsAny.postings_change_pct ?? "+0%"}%
-              </div>
+              <div className="text-sm text-emerald-400 mt-1">Recent</div>
             </CardContent>
           </Card>
 
@@ -297,7 +277,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
                       <div className="flex flex-col">
                         <span className="text-sm font-bold">{job.title}</span>
                         <span className="text-xs text-muted-foreground">
-                          {(job as any).department || ""}
+                          {""}
                         </span>
                       </div>
                     </td>
@@ -322,7 +302,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
                       <span
                         className={`inline-flex items-center gap-2 text-xs font-semibold ${job.remote_allowed ? "text-emerald-400" : "text-amber-400"}`}
                       >
-                        {(job as any).status || "Active"}
+                        {job.remote_allowed ? "Remote" : "Active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
