@@ -40,7 +40,7 @@ export function JobsSection({ jobs }: JobsSectionProps) {
       filtered = filtered.filter(
         (job) =>
           job.title.toLowerCase().includes(searchLower) ||
-          job.companyName.toLowerCase().includes(searchLower)
+          job.companyName.toLowerCase().includes(searchLower),
       );
     }
 
@@ -51,7 +51,7 @@ export function JobsSection({ jobs }: JobsSectionProps) {
           (job) =>
             job.remoteAllowed === true ||
             job.remoteAllowed === "1" ||
-            job.remoteAllowed === "true"
+            job.remoteAllowed === "true",
         );
       } else if (workMode === "onsite") {
         filtered = filtered.filter(
@@ -59,7 +59,7 @@ export function JobsSection({ jobs }: JobsSectionProps) {
             job.remoteAllowed === false ||
             job.remoteAllowed === "0" ||
             job.remoteAllowed === "false" ||
-            job.remoteAllowed === null
+            job.remoteAllowed === null,
         );
       }
       // Note: "hybrid" filter would need additional data field
@@ -70,15 +70,23 @@ export function JobsSection({ jobs }: JobsSectionProps) {
       filtered = filtered.filter((job) => {
         if (!job.experienceLevel) return false;
         const level = job.experienceLevel.toLowerCase();
-        
+
         if (experience === "entry") {
-          return level.includes("entry") || level.includes("junior") || level.includes("associate");
+          return (
+            level.includes("entry") ||
+            level.includes("junior") ||
+            level.includes("associate")
+          );
         } else if (experience === "mid") {
           return level.includes("mid") || level.includes("intermediate");
         } else if (experience === "senior") {
           return level.includes("senior") || level.includes("staff");
         } else if (experience === "lead") {
-          return level.includes("lead") || level.includes("principal") || level.includes("director");
+          return (
+            level.includes("lead") ||
+            level.includes("principal") ||
+            level.includes("director")
+          );
         }
         return false;
       });
@@ -130,9 +138,9 @@ export function JobsSection({ jobs }: JobsSectionProps) {
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     // Scroll to top of jobs section
-    document.getElementById("jobs-section")?.scrollIntoView({ 
+    document.getElementById("jobs-section")?.scrollIntoView({
       behavior: "smooth",
-      block: "start"
+      block: "start",
     });
   };
 

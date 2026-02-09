@@ -38,9 +38,9 @@ export function PaginationControls({
       {hasPrevPage && currentPage > 2 && (
         <>
           {onPageChange ? (
-            <Button 
-              variant="outline" 
-              size="icon" 
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => handlePageClick(1)}
               className="h-9 w-9"
             >
@@ -60,8 +60,8 @@ export function PaginationControls({
       {hasPrevPage && (
         <>
           {onPageChange ? (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => handlePageClick(currentPage - 1)}
               className="gap-1"
             >
@@ -123,8 +123,8 @@ export function PaginationControls({
       {hasNextPage && (
         <>
           {onPageChange ? (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => handlePageClick(currentPage + 1)}
               className="gap-1"
             >
@@ -146,9 +146,9 @@ export function PaginationControls({
       {hasNextPage && totalPages && currentPage < totalPages - 1 && (
         <>
           {onPageChange ? (
-            <Button 
-              variant="outline" 
-              size="icon" 
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => handlePageClick(totalPages)}
               className="h-9 w-9"
             >

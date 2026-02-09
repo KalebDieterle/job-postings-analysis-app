@@ -32,7 +32,9 @@ interface JobFiltersProps {
 export function JobFilters({ onFilterChange, initialValues }: JobFiltersProps) {
   const [search, setSearch] = useState(initialValues?.search || "");
   const [workMode, setWorkMode] = useState(initialValues?.workMode || "all");
-  const [experience, setExperience] = useState(initialValues?.experience || "all");
+  const [experience, setExperience] = useState(
+    initialValues?.experience || "all",
+  );
   const [sortBy, setSortBy] = useState(initialValues?.sortBy || "date");
   const [showFilters, setShowFilters] = useState(false);
 
