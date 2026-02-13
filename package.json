@@ -11,7 +11,8 @@
     "db:migrate": "tsx ./db/migrate.ts",
     "db:test": "tsx ./scripts/test-db.ts",
     "import-role-aliases": "tsx scripts/import-role-aliases.ts",
-    "geocode": "tsx scripts/geocode-all-companies.ts"
+    "geocode": "tsx scripts/geocode-all-companies.ts",
+    "test-adzuna": "tsx scripts/test-adzuna.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
