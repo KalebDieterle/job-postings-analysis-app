@@ -1,5 +1,5 @@
 import { pgTable, text, integer, boolean, timestamp, index, serial, real } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 export const benefits = pgTable("benefits", {
     job_id: text("job_id").notNull().primaryKey(),
@@ -23,6 +23,7 @@ export const companies = pgTable("companies", {
 }, (table) => ({
   latLngIdx: index('companies_lat_lng_idx').on(table.lat, table.lng),
   cityIdx: index('companies_city_idx').on(table.city),
+  nameLowerIdx: index('companies_name_lower_idx').on(sql`LOWER(${table.name})`),
 }));
 
 export const company_industries = pgTable("company_industries", {
@@ -92,7 +93,17 @@ export const postings = pgTable("postings", {
   normalized_salary: integer("normalized_salary"),
   zip_code: text("zip_code"),
   fips: text("fips"),
-});
+  // Adzuna import fields
+  external_id: text("external_id"),
+  source: text("source").default("manual"),
+  country: text("country"), // Required for globally unique job deduplication
+  import_timestamp: timestamp("import_timestamp").defaultNow(),
+}, (table) => ({
+  // Compound index for global uniqueness: (external_id, source, country)
+  // Prevents duplicate jobs when importing from multiple countries
+  externalIdSourceCountryIdx: index('postings_external_id_source_country_idx')
+    .on(table.external_id, table.source, table.country),
+}));
 
 export const salaries = pgTable("salaries", {
     salary_id: text("salary_id").notNull().primaryKey(),
@@ -109,6 +120,17 @@ export const skills = pgTable("skills", {
     skill_abr: text("skill_abr").notNull().primaryKey(),
     skill_name: text("skill_name").notNull(),
 });
+
+// Adzuna API usage tracking table
+// Persists API quota usage in database for CI/CD safety
+// Prevents quota exhaustion across multiple workflow runs
+export const adzunaUsage = pgTable("adzuna_usage", {
+  period: text("period").notNull(), // 'daily', 'weekly', 'monthly'
+  period_key: text("period_key").notNull(), // e.g. '2026-02-15', '2026-W07', '2026-02'
+  request_count: integer("request_count").notNull().default(0),
+}, (table) => ({
+  pk: sql`PRIMARY KEY (${table.period}, ${table.period_key})`,
+}));
 
 // Create relations
 // Relations

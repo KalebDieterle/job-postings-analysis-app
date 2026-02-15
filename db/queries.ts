@@ -17,7 +17,7 @@ const canonicalRole = (titleCol: any) =>
 async function getMostRecentDateRange(days: number = 30) {
   const maxDate = await db
     .select({
-      max_date: sql<string>`max(to_timestamp(${postings.listed_time}::double precision / 1000))`,
+      max_date: sql<string>`max(${postings.listed_time})`,
     })
     .from(postings);
 
@@ -181,12 +181,12 @@ export async function getTopRolesTimeSeries(limit = 10) {
     }>(sql`
       SELECT 
         COALESCE(ra.canonical_name, p.title) as title,
-        DATE_TRUNC('day', TO_TIMESTAMP(p.listed_time::numeric / 1000))::text as day,
+        DATE_TRUNC('day', p.listed_time::timestamp)::text as day,
         COUNT(*)::int as count
       FROM ${postings} p
       LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
       WHERE COALESCE(ra.canonical_name, p.title) = ANY(${topRoles})
-      GROUP BY COALESCE(ra.canonical_name, p.title), DATE_TRUNC('day', TO_TIMESTAMP(p.listed_time::numeric / 1000))
+      GROUP BY COALESCE(ra.canonical_name, p.title), DATE_TRUNC('day', p.listed_time::timestamp)
       ORDER BY day ASC
     `);
 
@@ -253,8 +253,8 @@ export async function getRoleStats(roleTitle: string) {
   const results = await db
     .select({
       total_jobs: count(),
-      avg_min_salary: avg(postings.yearly_min_salary),
-      avg_max_salary: avg(postings.yearly_max_salary),
+      avg_min_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
+      avg_max_salary: sql<number>`avg(${postings.yearly_max_salary}) filter (where ${postings.yearly_max_salary} > 0)`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`lower(postings.title) = lower(${roleAliases.alias})`)
@@ -286,12 +286,12 @@ export async function getAllSkills(params: { page?: number; limit?: number; sear
 
   const conditions = search ? ilike(skills.skill_name, `%${search}%`) : undefined;
 
-  // UPDATED: Simple avg(yearly_min_salary) replaces the regex mess
+  // UPDATED: avg(yearly_min_salary) excluding $0 values
   const data = await db
     .select({
       name: skills.skill_name,
       count: count(),
-      avg_salary: avg(postings.yearly_min_salary)
+      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
     })
     .from(skills)
     .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
@@ -315,7 +315,7 @@ export async function getSkillDetails(skillName: string) {
   const stats = await db
     .select({
       count: sql<number>`count(*)::int`,
-      avgSalary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+      avgSalary: sql<number>`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0)::float`,
     })
     .from(postings)
     .innerJoin(job_skills, eq(postings.job_id, job_skills.job_id))
@@ -384,15 +384,15 @@ export async function getSkillTrendingData(skillName: string) {
   const skillLower = skillName.toLowerCase();
   return await db
     .select({
-      day: sql<string>`date_trunc('day', to_timestamp(${postings.listed_time}::numeric / 1000))::text`,
+      day: sql<string>`date_trunc('day', ${postings.listed_time})::text`,
       count: sql<number>`count(*)::int`,
     })
     .from(postings)
     .innerJoin(job_skills, eq(postings.job_id, job_skills.job_id))
     .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
     .where(sql`lower(${skills.skill_name}) = ${skillLower}`)
-    .groupBy(sql`date_trunc('day', to_timestamp(${postings.listed_time}::numeric / 1000))`)
-    .orderBy(sql`date_trunc('day', to_timestamp(${postings.listed_time}::numeric / 1000)) ASC`);
+    .groupBy(sql`date_trunc('day', ${postings.listed_time})`)
+    .orderBy(sql`date_trunc('day', ${postings.listed_time}) ASC`);
 }
 
 export async function getRoleInsights(roleTitle: string) {
@@ -598,8 +598,8 @@ export async function getTopCompaniesBySize() {
         company_id: companies.company_id,
         company: companies.name,
         employee_count: employee_counts.employee_count,
-        // UPDATED: Now uses yearly_min_salary
-        avg_salary: avg(postings.yearly_min_salary).as("avg_salary"),
+        // UPDATED: Now uses yearly_min_salary, excluding $0 values
+        avg_salary: sql<number>`avg(case when ${postings.yearly_min_salary} > 0 then ${postings.yearly_min_salary} end)`.as("avg_salary"),
         posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
       })
       .from(companies)
@@ -610,7 +610,7 @@ export async function getTopCompaniesBySize() {
 
   const globalAvgCte = db.$with("global_avg").as(
     db.select({
-      global_avg_salary: avg(postings.yearly_min_salary).as("global_avg_salary"),
+      global_avg_salary: sql<number>`avg(case when ${postings.yearly_min_salary} > 0 then ${postings.yearly_min_salary} end)`.as("global_avg_salary"),
     }).from(postings)
   );
 
@@ -662,7 +662,7 @@ export async function getAvgSalaryPerEmployeeForTop10Fortune() {
       company: top_companies.name,
       fortune_rank: top_companies.fortune_rank,
       // Robust AVG with the sanity filter applied below
-      avg_salary: avg(postings.yearly_max_salary).mapWith(Number), 
+      avg_salary: sql<number>`avg(case when ${postings.yearly_max_salary} > 0 then ${postings.yearly_max_salary} end)`.mapWith(Number), 
       employee_count: sql<number>`COALESCE(${latestCounts.employee_count}, 0)`.mapWith(Number),
       posting_count: sql<number>`COUNT(${postings.job_id})`.mapWith(Number),
     })
@@ -694,8 +694,8 @@ export async function getCompanyJobStats(companyName: string) {
     .select({
       total_postings: sql<number>`COUNT(*)::int`,
       active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
-      // UPDATED: Now uses yearly_min_salary
-      avg_salary: avg(postings.yearly_min_salary),
+      // UPDATED: Now uses yearly_min_salary, excluding $0 values
+      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
       remote_count: sql<number>`SUM(CASE WHEN ${postings.remote_allowed} IN ('1', 'true') THEN 1 ELSE 0 END)::int`,
     })
     .from(postings)
@@ -709,8 +709,8 @@ export async function getCompanyTopRoles(companyName: string, limit = 10) {
     .select({
       title: sql<string>`COALESCE(${roleAliases.canonical_name}, ${postings.title})`,
       count: sql<number>`COUNT(*)::int`,
-      // UPDATED: Now uses yearly_min_salary
-      avg_salary: avg(postings.yearly_min_salary),
+      // UPDATED: Now uses yearly_min_salary, excluding $0 values
+      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
@@ -738,10 +738,10 @@ export async function getCompanyTopSkills(companyName: string, limit = 15) {
 
 export async function getCompanyPostingsTimeSeries(companyName: string) {
   const result = await db.execute<{ month: string; count: number }>(sql`
-    SELECT TO_CHAR(DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000)), 'YYYY-MM') as month, COUNT(*)::int as count
+    SELECT TO_CHAR(DATE_TRUNC('month', listed_time::timestamp), 'YYYY-MM') as month, COUNT(*)::int as count
     FROM ${postings}
     WHERE LOWER(company_name) = LOWER(${companyName})
-    GROUP BY DATE_TRUNC('month', TO_TIMESTAMP(listed_time::numeric / 1000))
+    GROUP BY DATE_TRUNC('month', listed_time::timestamp)
     ORDER BY month ASC
   `);
   return result.rows;
@@ -817,8 +817,8 @@ export async function getJobsByLocation() {
       country: companies.country,
       jobCount: sql<number>`count(distinct ${postings.job_id})`.as('job_count'),
       companyCount: sql<number>`count(distinct ${postings.company_id})`.as('company_count'),
-      avgMinSalary: sql<number>`avg(${postings.yearly_min_salary})`.as('avg_min_salary'),
-      avgMaxSalary: sql<number>`avg(${postings.yearly_max_salary})`.as('avg_max_salary'),
+      avgMinSalary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`.as('avg_min_salary'),
+      avgMaxSalary: sql<number>`avg(${postings.yearly_max_salary}) filter (where ${postings.yearly_max_salary} > 0)`.as('avg_max_salary'),
       // Fix: Compare text to string '1' or 'true'
       remoteCount: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as('remote_count'),
     })
@@ -845,7 +845,7 @@ export async function getJobsByCity() {
       lng: sql<number>`AVG(${companies.lng})`,
       jobCount: sql<number>`count(distinct ${postings.job_id})::int`,
       companyCount: sql<number>`count(distinct ${postings.company_id})::int`,
-      avgSalary: sql<number>`round(avg((${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2))::int`,
+      avgSalary: sql<number>`round(avg(case when ${postings.yearly_min_salary} > 0 and ${postings.yearly_max_salary} > 0 then (${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2 end))::int`,
       // Fix: cast text to float for ratio calculation
       remoteRatio: sql<number>`(
         count(*) FILTER (WHERE ${postings.remote_allowed} IN ('1', 'true'))::float / NULLIF(count(*), 0)
@@ -995,15 +995,10 @@ export async function getRecentJobsByLocation(locationSlug: string, limit = 20) 
 // ===========================
 // Trending Skills with Growth Analysis (Max-Date Anchored)
 // ===========================
-export async function getTrendingSkills(params: {
-  timeframe?: number; // days to look back (default 30)
-  limit?: number;
-  sortBy?: 'demand' | 'salary';
-}) {
-  const { timeframe = 30, limit = 24, sortBy = 'demand' } = params;
-  const timeframeSec = timeframe * 24 * 60 * 60;
-  
-  // Single optimized query with max_date anchor calculated in CTE
+
+export async function getTrendingSkills(timeframeDays: number = 30, limit: number = 10) {
+  const days = Number.isFinite(timeframeDays) ? timeframeDays : 30;
+
   const result = await db.execute<{
     name: string;
     current_count: number;
@@ -1012,23 +1007,21 @@ export async function getTrendingSkills(params: {
     previous_salary: number;
     growth_percentage: number;
     salary_change: number;
-    trend_status: string;
+    trend_status: 'breakout' | 'rising' | 'falling';
   }>(sql`
     WITH date_bounds AS (
-      SELECT 
-        MAX(p.listed_time::numeric / 1000) as max_ts
-      FROM ${postings} p
+      SELECT MAX(listed_time) as max_date FROM "postings"
     ),
     current_period AS (
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
-      FROM ${skills} s
-      INNER JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
-      INNER JOIN ${postings} p ON js.job_id = p.job_id
+        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+      FROM "skills" s
+      INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
+      INNER JOIN "postings" p ON js.job_id = p.job_id
       CROSS JOIN date_bounds db
-      WHERE (p.listed_time::numeric / 1000) >= (db.max_ts - ${timeframeSec})
+      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days}))
       GROUP BY s.skill_name
       HAVING COUNT(*) > 5
     ),
@@ -1036,13 +1029,13 @@ export async function getTrendingSkills(params: {
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
-      FROM ${skills} s
-      INNER JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
-      INNER JOIN ${postings} p ON js.job_id = p.job_id
+        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+      FROM "skills" s
+      INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
+      INNER JOIN "postings" p ON js.job_id = p.job_id
       CROSS JOIN date_bounds db
-      WHERE (p.listed_time::numeric / 1000) >= (db.max_ts - ${2 * timeframeSec})
-        AND (p.listed_time::numeric / 1000) < (db.max_ts - ${timeframeSec})
+      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days * 2}))
+        AND p.listed_time < (db.max_date - (INTERVAL '1 day' * ${days}))
       GROUP BY s.skill_name
     )
     SELECT 
@@ -1063,52 +1056,45 @@ export async function getTrendingSkills(params: {
       END as trend_status
     FROM current_period c
     LEFT JOIN previous_period p ON c.name = p.name
-    ORDER BY ${sortBy === 'salary' ? sql.raw('salary_change DESC') : sql.raw('growth_percentage DESC')}
+    ORDER BY growth_percentage DESC
     LIMIT ${limit}
   `);
-  
-  return result.rows.map(row => ({
-    name: row.name,
-    currentCount: Number(row.current_count),
-    previousCount: Number(row.previous_count),
-    currentSalary: Number(row.current_salary),
-    previousSalary: Number(row.previous_salary),
-    growthPercentage: Number(row.growth_percentage),
-    salaryChange: Number(row.salary_change),
-    trendStatus: row.trend_status as 'rising' | 'falling' | 'breakout',
-  }));
+
+  return result.rows;
 }
 
 // ===========================
 // Trending Stats Overview (Max-Date Anchored)
 // ===========================
-export async function getTrendingStats(timeframe = 30) {
-  const timeframeSec = timeframe * 24 * 60 * 60;
-  
+
+export async function getTrendingStats(timeframe: number = 30) {
+  // 1. Safety check for the timeframe input
+  const days = Number.isFinite(timeframe) ? timeframe : 30;
+
   const result = await db.execute<{
-    top_gainer: string;
-    top_gainer_growth: number;
-    avg_growth: number;
-    highest_salary_jump: string;
-    highest_salary_increase: number;
-    new_entries: number;
-    max_date: string;
+    top_gainer: string | null;
+    top_gainer_growth: number | null;
+    avg_growth: number | null;
+    highest_salary_jump: string | null;
+    highest_salary_increase: number | null;
+    new_entries: number | null;
+    max_date: string | null;
   }>(sql`
     WITH date_bounds AS (
-      SELECT 
-        MAX(p.listed_time::numeric / 1000) as max_ts
-      FROM ${postings} p
+      -- Get the most recent posting date to use as a baseline
+      SELECT MAX(p.listed_time) as max_date FROM "postings" p
     ),
     current_period AS (
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
-      FROM ${skills} s
-      INNER JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
-      INNER JOIN ${postings} p ON js.job_id = p.job_id
+        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+      FROM "skills" s
+      INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
+      INNER JOIN "postings" p ON js.job_id = p.job_id
       CROSS JOIN date_bounds db
-      WHERE (p.listed_time::numeric / 1000) >= (db.max_ts - ${timeframeSec})
+      -- Filter for the current window (e.g., last 30 days)
+      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days}))
       GROUP BY s.skill_name
       HAVING COUNT(*) > 5
     ),
@@ -1116,13 +1102,14 @@ export async function getTrendingStats(timeframe = 30) {
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary), 0)::float as avg_salary
-      FROM ${skills} s
-      INNER JOIN ${job_skills} js ON s.skill_abr = js.skill_abr
-      INNER JOIN ${postings} p ON js.job_id = p.job_id
+        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+      FROM "skills" s
+      INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
+      INNER JOIN "postings" p ON js.job_id = p.job_id
       CROSS JOIN date_bounds db
-      WHERE (p.listed_time::numeric / 1000) >= (db.max_ts - ${2 * timeframeSec})
-        AND (p.listed_time::numeric / 1000) < (db.max_ts - ${timeframeSec})
+      -- Filter for the previous window (e.g., 60 to 30 days ago)
+      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days * 2}))
+        AND p.listed_time < (db.max_date - (INTERVAL '1 day' * ${days}))
       GROUP BY s.skill_name
     ),
     growth_data AS (
@@ -1147,18 +1134,23 @@ export async function getTrendingStats(timeframe = 30) {
       (SELECT name FROM growth_data ORDER BY salary_change DESC LIMIT 1) as highest_salary_jump,
       COALESCE((SELECT salary_change FROM growth_data ORDER BY salary_change DESC LIMIT 1), 0) as highest_salary_increase,
       (SELECT COUNT(*) FROM growth_data WHERE previous_count = 0)::int as new_entries,
-      TO_CHAR(TO_TIMESTAMP((SELECT max_ts FROM date_bounds)), 'Mon YYYY') as max_date
+      TO_CHAR((SELECT max_date FROM date_bounds), 'Mon YYYY') as max_date
   `);
-  
-  const stats = result.rows[0];
+
+  const row = result.rows[0];
+
+  /**
+   * 2. Map snake_case database fields to the camelCase fields 
+   * expected by the TrendingContent component in page.tsx.
+   */
   return {
-    topGainer: stats?.top_gainer || 'N/A',
-    topGainerGrowth: Number(stats?.top_gainer_growth || 0),
-    avgGrowth: Number(stats?.avg_growth || 0),
-    highestSalaryJump: stats?.highest_salary_jump || 'N/A',
-    highestSalaryIncrease: Number(stats?.highest_salary_increase || 0),
-    newEntries: Number(stats?.new_entries || 0),
-    dataAsOf: stats?.max_date || 'Unknown',
+    topGainer: row?.top_gainer ?? "No Data",
+    topGainerGrowth: Number(row?.top_gainer_growth ?? 0), // Prevents .toFixed(1) crash
+    avgGrowth: Number(row?.avg_growth ?? 0),
+    highestSalaryJump: row?.highest_salary_jump ?? "No Data",
+    highestSalaryIncrease: Number(row?.highest_salary_increase ?? 0),
+    newEntries: Number(row?.new_entries ?? 0),
+    dataAsOf: row?.max_date ?? "N/A" // Maps to stats.dataAsOf in page.tsx
   };
 }
 
@@ -1170,6 +1162,9 @@ export async function getAverageSalary(
   filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
 ) {
   const conditions = [];
+
+  // Exclude $0 and null salaries from average
+  conditions.push(sql`${postings.yearly_min_salary} IS NOT NULL AND ${postings.yearly_min_salary} > 0`);
 
   if (filters?.location) {
     conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
@@ -1194,7 +1189,7 @@ export async function getAverageSalary(
 
   const query = db
     .select({
-      avg_salary: avg(postings.yearly_min_salary),
+      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`);
@@ -1391,7 +1386,7 @@ export async function getPostingTimeline(
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
-  conditions.push(sql`to_timestamp(${postings.listed_time}::double precision / 1000) >= to_timestamp(${cutoffDate.getTime() / 1000})`);
+  conditions.push(sql`${postings.listed_time} >= ${cutoffDate.toISOString()}::timestamp`);
 
   if (filters?.location) {
     conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
@@ -1416,14 +1411,14 @@ export async function getPostingTimeline(
 
   return await db
     .select({
-      week: sql<string>`TO_CHAR(DATE_TRUNC('week', to_timestamp(${postings.listed_time}::double precision / 1000)), 'YYYY-MM-DD')`,
+      week: sql<string>`TO_CHAR(DATE_TRUNC('week', ${postings.listed_time}), 'YYYY-MM-DD')`,
       count: sql<number>`COUNT(*)::int`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
     .where(and(...conditions))
-    .groupBy(sql`DATE_TRUNC('week', to_timestamp(${postings.listed_time}::double precision / 1000))`)
-    .orderBy(sql`DATE_TRUNC('week', to_timestamp(${postings.listed_time}::double precision / 1000)) ASC`);
+    .groupBy(sql`DATE_TRUNC('week', ${postings.listed_time})`)
+    .orderBy(sql`DATE_TRUNC('week', ${postings.listed_time}) ASC`);
 }
 
 export async function getExperienceDistribution(
@@ -1478,10 +1473,10 @@ export async function getTotalStats() {
     total_skills: number;
   }>(sql`
     SELECT 
-      (SELECT COUNT(*)::int FROM ${postings}) as total_jobs,
-      (SELECT ROUND(AVG(yearly_min_salary))::int FROM ${postings} WHERE yearly_min_salary IS NOT NULL) as avg_salary,
-      (SELECT COUNT(DISTINCT company_id)::int FROM ${companies}) as total_companies,
-      (SELECT COUNT(*)::int FROM ${skills}) as total_skills
+      (SELECT COUNT(*)::int FROM "postings") as total_jobs,
+      (SELECT ROUND(AVG(yearly_min_salary))::int FROM "postings" WHERE yearly_min_salary IS NOT NULL AND yearly_min_salary > 0) as avg_salary,
+      (SELECT COUNT(DISTINCT company_id)::int FROM "companies") as total_companies,
+      (SELECT COUNT(*)::int FROM "skills") as total_skills
   `);
 
   const stats = result.rows[0];
@@ -1494,14 +1489,15 @@ export async function getTotalStats() {
 
   const growthResult = await db.execute<{ current: number; previous: number }>(sql`
     SELECT 
-      COUNT(*) FILTER (WHERE to_timestamp(listed_time::double precision / 1000) >= ${thirtyDaysAgo.toISOString()}::timestamp)::int as current,
-      COUNT(*) FILTER (WHERE to_timestamp(listed_time::double precision / 1000) >= ${sixtyDaysAgo.toISOString()}::timestamp 
-                         AND to_timestamp(listed_time::double precision / 1000) < ${thirtyDaysAgo.toISOString()}::timestamp)::int as previous
-    FROM ${postings}
+      -- Now that listed_time is a TIMESTAMP, compare it directly
+      COUNT(*) FILTER (WHERE listed_time >= ${thirtyDaysAgo.toISOString()}::timestamp)::int as current,
+      COUNT(*) FILTER (WHERE listed_time >= ${sixtyDaysAgo.toISOString()}::timestamp 
+                         AND listed_time < ${thirtyDaysAgo.toISOString()}::timestamp)::int as previous
+    FROM "postings"
   `);
 
   const growth = growthResult.rows[0];
-  const monthlyGrowth = growth?.previous > 0 
+  const monthlyGrowth = (growth?.previous ?? 0) > 0 
     ? Math.round(((growth.current - growth.previous) / growth.previous) * 100)
     : 0;
 
@@ -1539,7 +1535,7 @@ export async function getTopHiringCompanies(limit = 6) {
       SELECT 
         p.company_name,
         COUNT(DISTINCT p.job_id)::int as open_positions,
-        ROUND(AVG(p.yearly_min_salary))::int as avg_salary
+        ROUND(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0))::int as avg_salary
       FROM ${postings} p
       WHERE p.company_name IS NOT NULL
       GROUP BY p.company_name
@@ -1691,7 +1687,7 @@ export async function getSkillsWithFilters(params: {
     .select({
       name: skills.skill_name,
       count: sql<number>`count(*)::int`,
-      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0)::float`,
     })
     .from(skills)
     .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
@@ -1708,8 +1704,8 @@ export async function getSkillsWithFilters(params: {
     and(
       sql`count(*) >= ${demandMin}`,
       sql`count(*) <= ${demandMax}`,
-      sql`coalesce(avg(${postings.yearly_min_salary}), 0) >= ${salaryMin}`,
-      sql`coalesce(avg(${postings.yearly_min_salary}), 0) <= ${salaryMax}`
+      sql`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0) >= ${salaryMin}`,
+      sql`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0) <= ${salaryMax}`
     )
   ) as any;
 
@@ -1919,7 +1915,7 @@ export async function getSkillTimeline(params: {
   return await db
     .select({
       skill_name: skills.skill_name,
-      day: sql<string>`date_trunc('day', to_timestamp(${postings.listed_time}::double precision / 1000))::text`,
+      day: sql<string>`date_trunc('day', ${postings.listed_time})::text`,
       count: sql<number>`count(*)::int`,
     })
     .from(job_skills)
@@ -1927,7 +1923,7 @@ export async function getSkillTimeline(params: {
     .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
     .where(
       and(
-        sql`to_timestamp(${postings.listed_time}::double precision / 1000) >= ${daysAgo.toISOString()}::timestamp`,
+        sql`${postings.listed_time} >= ${daysAgo.toISOString()}::timestamp`,
         inArray(
           skills.skill_name,
           skillNames.map((n) => n)
@@ -1936,9 +1932,9 @@ export async function getSkillTimeline(params: {
     )
     .groupBy(
       skills.skill_name,
-      sql`date_trunc('day', to_timestamp(${postings.listed_time}::double precision / 1000))`
+      sql`date_trunc('day', ${postings.listed_time})`
     )
-    .orderBy(sql`date_trunc('day', to_timestamp(${postings.listed_time}::double precision / 1000)) ASC`);
+    .orderBy(sql`date_trunc('day', ${postings.listed_time}) ASC`);
 }
 
 export async function getCategoryDistribution() {
@@ -2060,13 +2056,13 @@ const avgDemandValue = avgDemandData[0]?.unique_skills
   ? Math.round(avgDemandData[0].total_jobs / avgDemandData[0].unique_skills)
   : 0;
 
-  // Average salary across all skills
+  // Average salary across all skills (excluding $0 salaries)
   const avgSalary = await db
     .select({
       avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
     })
     .from(postings)
-    .where(isNotNull(postings.yearly_min_salary));
+    .where(and(isNotNull(postings.yearly_min_salary), gt(postings.yearly_min_salary, 0)));
 
   // Most in-demand skill
   const topSkill = await db
@@ -2089,7 +2085,7 @@ const avgDemandValue = avgDemandData[0]?.unique_skills
     .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
     .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
     .where(
-      sql`to_timestamp(${postings.listed_time}::double precision / 1000) >= ${thirtyDaysAgo.toISOString()}::timestamp`
+      sql`${postings.listed_time} >= ${thirtyDaysAgo.toISOString()}::timestamp`
     );
 
   // Fastest growing skill

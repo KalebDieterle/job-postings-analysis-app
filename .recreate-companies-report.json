@@ -1,0 +1,139 @@
+{
+  "timestamp": "2026-02-15T21:07:16.389Z",
+  "dryRun": false,
+  "totalPostings": 29968,
+  "orphanedPostings": 29009,
+  "orphanedPct": "96.80%",
+  "uniqueMissingCompanies": 9274,
+  "inserted": 9273,
+  "updated": 1,
+  "failed": 0,
+  "locationParseStats": {
+    "full": 7138,
+    "partial": 1321,
+    "none": 815
+  },
+  "durationMs": 7426,
+  "sampleCompanies": [
+    {
+      "id": "167757.0",
+      "name": "The Job Network",
+      "city": "Adairsville",
+      "state": "GA"
+    },
+    {
+      "id": "18860134.0",
+      "name": "Jobot",
+      "city": "Addison",
+      "state": "TX"
+    },
+    {
+      "id": "1681.0",
+      "name": "Robert Half",
+      "city": "Ann Arbor",
+      "state": "MI"
+    },
+    {
+      "id": "248184.0",
+      "name": "Creative Financial Staffing (CFS)",
+      "city": "Akron",
+      "state": "OH"
+    },
+    {
+      "id": "11229.0",
+      "name": "Vaco",
+      "city": "Aliso Viejo",
+      "state": "CA"
+    },
+    {
+      "id": "1586.0",
+      "name": "Amazon",
+      "city": "Arlington",
+      "state": "VA"
+    },
+    {
+      "id": "5235.0",
+      "name": "LHH",
+      "city": "Addison",
+      "state": "IL"
+    },
+    {
+      "id": "2396310.0",
+      "name": "Randstad USA",
+      "city": "American Canyon",
+      "state": "CA"
+    },
+    {
+      "id": "2908367.0",
+      "name": "gpac",
+      "city": "Aurora",
+      "state": "CO"
+    },
+    {
+      "id": "164414.0",
+      "name": "Intermountain Health",
+      "city": "Billings",
+      "state": "MT"
+    },
+    {
+      "id": "21836.0",
+      "name": "CyberCoders",
+      "city": "Apache Junction",
+      "state": "AZ"
+    },
+    {
+      "id": "79383535.0",
+      "name": "Akkodis",
+      "city": "Akron",
+      "state": "OH"
+    },
+    {
+      "id": "4787.0",
+      "name": "Apex Systems",
+      "city": "Alpharetta",
+      "state": "GA"
+    },
+    {
+      "id": "2532.0",
+      "name": "U.S. Bank",
+      "city": "Albuquerque",
+      "state": "NM"
+    },
+    {
+      "id": "2615835.0",
+      "name": "Piper Companies",
+      "city": "Aurora",
+      "state": "CO"
+    },
+    {
+      "id": "17980749.0",
+      "name": "Lakefield Veterinary Group",
+      "city": "Anchorage",
+      "state": "AK"
+    },
+    {
+      "id": "827183.0",
+      "name": "Russell Tobin",
+      "city": "Alpharetta",
+      "state": "GA"
+    },
+    {
+      "id": "3476.0",
+      "name": "Michael Page",
+      "city": "Arizona",
+      "state": null
+    },
+    {
+      "id": "166209.0",
+      "name": "Sutter Health",
+      "city": "Berkeley",
+      "state": "CA"
+    },
+    {
+      "id": "6849.0",
+      "name": "Dice",
+      "city": "Aberdeen Proving Ground",
+      "state": "MD"
+    }
+  ]
+}

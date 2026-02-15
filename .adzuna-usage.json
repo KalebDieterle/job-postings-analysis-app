@@ -1,0 +1,14 @@
+{
+  "daily": {
+    "date": "2026-02-15",
+    "count": 24
+  },
+  "weekly": {
+    "startDate": "2026-02-09",
+    "count": 24
+  },
+  "monthly": {
+    "month": "2026-02",
+    "count": 24
+  }
+}

@@ -40,6 +40,31 @@ yarn-error.log*
 .env.local
 .env
 
+# Credentials & Secrets
+**/credentials.json
+**/secrets.json
+**/api-keys.txt
+
+# Database backups & exports (contain real data)
+*.sql
+*.sql.gz
+backup-*.sql
+*.bak
+
+# Workflow logs & sensitive outputs
+.github/workflows/**/*.log
+scripts/**/*.log
+
+# Temporary files that might contain secrets
+.tmp/
+.cache/
+*.swp
+*.swo
+
+# IDE files (might contain env references)
+.vscode/settings.json
+.idea/
+
 # vercel
 .vercel
 
