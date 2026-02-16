@@ -1,0 +1,84 @@
+{
+  "timestamp": "2026-02-15T19:58:35.140Z",
+  "dry_run": false,
+  "duplicates_found": 7,
+  "total_duplicate_records": 24,
+  "records_to_delete": 17,
+  "records_kept": 7,
+  "postings_affected": 19,
+  "duplicate_groups": [
+    {
+      "company_id": "1366435ff740c31d",
+      "name": "Contact Government Services, LLC",
+      "duplicate_count": 6,
+      "kept_record": "Contact Government Services, LLC",
+      "deleted_records": [
+        "Contact Government Services, LLC",
+        "Contact Government Services, LLC",
+        "Contact Government Services, LLC",
+        "Contact Government Services, LLC",
+        "Contact Government Services, LLC"
+      ]
+    },
+    {
+      "company_id": "96a20168c8a64002",
+      "name": "Attainx Inc",
+      "duplicate_count": 5,
+      "kept_record": "Attainx Inc",
+      "deleted_records": [
+        "Attainx Inc",
+        "Attainx Inc",
+        "Attainx Inc",
+        "Attainx Inc"
+      ]
+    },
+    {
+      "company_id": "a2c329d17b748ca8",
+      "name": "LIGHTFEATHER IO LLC",
+      "duplicate_count": 4,
+      "kept_record": "LIGHTFEATHER IO LLC",
+      "deleted_records": [
+        "LIGHTFEATHER IO LLC",
+        "LIGHTFEATHER IO LLC",
+        "LIGHTFEATHER IO LLC"
+      ]
+    },
+    {
+      "company_id": "c7f3b19b9573530c",
+      "name": "Harmonia Holdings Group, LLC",
+      "duplicate_count": 3,
+      "kept_record": "Harmonia Holdings Group, LLC",
+      "deleted_records": [
+        "Harmonia Holdings Group, LLC",
+        "Harmonia Holdings Group, LLC"
+      ]
+    },
+    {
+      "company_id": "71eeb6e2359a8323",
+      "name": "Axelon Services Corporation",
+      "duplicate_count": 2,
+      "kept_record": "Axelon Services Corporation",
+      "deleted_records": [
+        "Axelon Services Corporation"
+      ]
+    },
+    {
+      "company_id": "69bc65181a443965",
+      "name": "Volkert Inc",
+      "duplicate_count": 2,
+      "kept_record": "Volkert Inc",
+      "deleted_records": [
+        "Volkert Inc"
+      ]
+    },
+    {
+      "company_id": "065ca40e308888ac",
+      "name": "iCarCover, Inc.",
+      "duplicate_count": 2,
+      "kept_record": "iCarCover, Inc.",
+      "deleted_records": [
+        "iCarCover, Inc."
+      ]
+    }
+  ]
+}
