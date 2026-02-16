@@ -63,6 +63,7 @@ scripts/**/*.log
 
 # IDE files (might contain env references)
 .vscode/settings.json
+.vscode/.mcp.json
 .idea/
 
 # vercel
@@ -71,3 +72,9 @@ scripts/**/*.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Runtime tracking & report files
+.adzuna-usage.json
+.company-cleanup-report.json
+.recreate-companies-report.json
+*-report.json
