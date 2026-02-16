@@ -75,6 +75,4 @@ next-env.d.ts
 
 # Runtime tracking & report files
 .adzuna-usage.json
-.company-cleanup-report.json
-.recreate-companies-report.json
 *-report.json
