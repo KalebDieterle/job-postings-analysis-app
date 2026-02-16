@@ -74,5 +74,5 @@ scripts/**/*.log
 next-env.d.ts
 
 # Runtime tracking & report files
-.adzuna-usage.json
 *-report.json
+!.adzuna-usage.json

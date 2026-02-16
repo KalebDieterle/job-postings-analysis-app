@@ -1,100 +1,171 @@
 name: Daily Adzuna Job Import
 
 on:
-  # Run daily at 2 AM UTC
   schedule:
+    # Run daily at 2:00 AM UTC
     - cron: '0 2 * * *'
   
-  # Allow manual triggering for testing
   workflow_dispatch:
+    # Allow manual triggers with optional parameters
     inputs:
       max_results:
-        description: 'Maximum results to fetch (default: 200)'
+        description: 'Maximum job results to fetch (default: 240)'
         required: false
-        default: '200'
+        default: '240'
+      dry_run:
+        description: 'Dry run mode (preview only, no DB writes)'
+        required: false
+        type: boolean
+        default: false
+
+# Required permissions for the workflow
+permissions:
+  contents: read
+  issues: write
+
+# Prevent concurrent workflow runs to avoid API quota conflicts
+concurrency:
+  group: adzuna-import
+  cancel-in-progress: false
 
 jobs:
-  import-jobs:
+  preflight-security-check:
+    name: 🔒 Preflight Security Validation
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-
+      
       - name: Install dependencies
         run: npm ci
+      
+      - name: Validate secrets and rate limits
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+        run: |
+          echo "::add-mask::$DATABASE_URL"
+          echo "::add-mask::$ADZUNA_APP_ID"
+          echo "::add-mask::$ADZUNA_APP_KEY"
+          npx tsx scripts/validate-secrets-and-limits.ts
+      
+      - name: Security check passed
+        run: echo "✅ All security validations passed"
 
+  import-jobs:
+    name: 📥 Import Jobs from Adzuna
+    runs-on: ubuntu-latest
+    needs: preflight-security-check
+    
+    # Only run if preflight passed
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
       - name: Run Adzuna import
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          ADZUNA_MAX_RESULTS: ${{ github.event.inputs.max_results || '200' }}
-          ADZUNA_ROLES: "software engineer,data engineer,devops engineer,frontend developer,backend developer,full stack developer"
-          ADZUNA_LOCATIONS: "us"
-          ADZUNA_RESULTS_PER_PAGE: "50"
-          ADZUNA_RATE_LIMIT_MS: "2500"
-          ADZUNA_DAYS_BACK: "2"
-          ADZUNA_DAILY_LIMIT: "240"
-        run: npm run import:adzuna
-
-      - name: Upload import logs
+          ADZUNA_MAX_RESULTS: ${{ github.event.inputs.max_results || '240' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          # Mask secrets in logs
+          echo "::add-mask::$DATABASE_URL"
+          echo "::add-mask::$ADZUNA_APP_ID"
+          echo "::add-mask::$ADZUNA_APP_KEY"
+          
+          # Log safe metadata
+          echo "Starting import at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Max results: $ADZUNA_MAX_RESULTS"
+          echo "Dry run: $DRY_RUN"
+          
+          # Run import
+          npm run import:adzuna
+      
+      - name: Verify import integrity
+        if: success()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "::add-mask::$DATABASE_URL"
+          npm run verify:companies
+      
+      - name: Import summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: import-logs-${{ github.run_number }}
-          path: .adzuna-usage.json
-          retention-days: 30
+        run: |
+          echo "Import completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - name: Create issue on failure
-        if: failure()
+  notify-on-failure:
+    name: 🚨 Failure Notification
+    runs-on: ubuntu-latest
+    needs: [preflight-security-check, import-jobs]
+    if: failure()
+    
+    # Explicit permissions for issue creation (required for scheduled runs)
+    permissions:
+      contents: read
+      issues: write
+    
+    steps:
+      - name: Create failure issue
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `❌ Daily Adzuna Import Failed - ${new Date().toISOString().split('T')[0]}`;
+            const title = '🚨 Adzuna Import Failed - ' + new Date().toISOString().split('T')[0];
             const body = `
             ## Import Failure Report
             
-            The daily Adzuna job import workflow failed.
+            **Workflow:** ${context.workflow}
+            **Run ID:** ${context.runId}
+            **Triggered by:** ${context.eventName}
+            **Time:** ${new Date().toUTCString()}
             
-            **Run Details:**
-            - Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            - Triggered: ${new Date().toISOString()}
-            - Branch: ${{ github.ref_name }}
+            ### Details
+            - **Run URL:** ${context.payload.repository.html_url}/actions/runs/${context.runId}
+            - **Commit:** ${context.sha.substring(0, 7)}
+            - **Branch:** ${context.ref}
             
-            **Possible Causes:**
-            - API rate limits exceeded
-            - Database connection issues
-            - Invalid API credentials
-            - Network timeout
+            ### Possible Causes
+            1. Invalid or missing secrets (DATABASE_URL, ADZUNA_APP_ID, ADZUNA_APP_KEY)
+            2. API rate limit exceeded
+            3. Network connectivity issues
+            4. Database connection failure
             
-            **Next Steps:**
-            1. Check the workflow logs for detailed error messages
-            2. Verify API usage hasn't exceeded daily/weekly/monthly limits
-            3. Ensure DATABASE_URL and Adzuna API credentials are valid
-            4. Check Neon database status
-            5. Manually trigger the workflow after resolving issues
+            ### Action Required
+            1. Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            2. Verify repository secrets are correctly configured
+            3. Ensure rate limits are not exceeded
+            4. Check database connectivity
             
-            **Logs:**
-            [View full logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            ### Security Note
+            No secrets are exposed in this issue or workflow logs.
             `;
             
-            await github.rest.issues.create({
+            github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: title,
               body: body,
               labels: ['bug', 'automation', 'adzuna-import']
             });
-
-      - name: Comment on success
-        if: success()
-        run: |
-          echo "✅ Adzuna import completed successfully!"
-          echo "Check the Actions tab for detailed logs."
