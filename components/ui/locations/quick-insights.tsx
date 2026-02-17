@@ -74,7 +74,7 @@ export function QuickInsights({
                 Highest Paying
               </p>
               <p className="text-3xl font-black bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
-                ${(highestPayingLocation.salary / 1000).toFixed(0)}k
+                ${highestPayingLocation.salary.toLocaleString()}
               </p>
               <p className="text-sm font-medium text-foreground/80 truncate">
                 {highestPayingLocation.name}

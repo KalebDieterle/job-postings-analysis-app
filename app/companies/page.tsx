@@ -1,12 +1,14 @@
+export const dynamic = "force-dynamic";
+
 import { IndustryRadarChart } from "@/components/ui/charts/industry-radar-chart";
 import { CompanyOverview } from "@/components/ui/company-overview";
 import { CompanyAvgSalaryGraph } from "@/components/ui/charts/company-avg-salary-graph";
 import { CompanyCard } from "@/components/ui/company-card";
-import { FilterBar } from "@/components/ui/filters/filter-bar";
+import { CompaniesFilterBar } from "@/components/ui/filters/companies-filter-bar";
 import { HeroStatsDashboard } from "@/components/ui/companies/hero-stats-dashboard";
 import { ComparisonPanelWrapper } from "@/components/ui/companies/comparison-panel-wrapper";
 
-import { searchParamsCache } from "@/lib/search-params";
+import { companiesSearchParamsCache } from "@/lib/companies-search-params";
 import { slugify } from "@/lib/slugify";
 
 import {
@@ -26,7 +28,7 @@ type PageProps = {
 };
 
 export default async function CompaniesPage({ searchParams }: PageProps) {
-  const filters = await searchParamsCache.parse(searchParams);
+  const filters = await companiesSearchParamsCache.parse(searchParams);
   const page =
     typeof filters.page === "string"
       ? parseInt(filters.page)
@@ -38,10 +40,14 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
   const [companiesRaw, salaryResults, , fortuneResults, heroStats] =
     await Promise.all([
       getAllCompanyData({
-        limit, // Query already handles limit + 1 internally
+        limit,
         offset,
         search: filters.q,
         location: filters.location,
+        companySize: filters.companySize,
+        minSalary: filters.minSalary,
+        minPostings: filters.minPostings,
+        sort: filters.sort,
       }),
       getAverageCompanySalary(),
       getTopCompaniesBySize(),
@@ -58,6 +64,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
   const companies = companiesRaw.slice(0, limit).map((company: any) => ({
     ...company,
     postings_count: Number(company.postings_count ?? 0),
+    avg_salary: Number(company.avg_salary ?? 0),
     company_size: company.company_size?.toString() || "N/A",
     slug: slugify(company.name ?? ""),
   }));
@@ -83,6 +90,13 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
     params.set("page", pageNum.toString());
     if (filters.q) params.set("q", filters.q);
     if (filters.location) params.set("location", filters.location);
+    if (filters.companySize.length > 0)
+      params.set("companySize", filters.companySize.join(","));
+    if (filters.minSalary > 0)
+      params.set("minSalary", filters.minSalary.toString());
+    if (filters.minPostings > 0)
+      params.set("minPostings", filters.minPostings.toString());
+    if (filters.sort !== "postings") params.set("sort", filters.sort);
     return `/companies?${params.toString()}`;
   };
 
@@ -99,8 +113,8 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
       {/* Hero Stats Dashboard */}
       <HeroStatsDashboard stats={heroStats} />
 
-      {/* Search Bar */}
-      <FilterBar />
+      {/* Company Filters */}
+      <CompaniesFilterBar />
 
       <Suspense
         fallback={<div className="h-28 rounded-xl bg-muted animate-pulse" />}

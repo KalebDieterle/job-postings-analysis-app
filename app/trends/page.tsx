@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getTrendingSkills, getTrendingStats } from "@/db/queries";
 import { TrendingSkillCard } from "@/components/ui/trending/trending-skill-card-v2";
 import { TrendingFilters } from "@/components/ui/trending/trending-filters";
@@ -13,6 +15,7 @@ import {
   DollarSign,
   Sparkles,
   Calendar,
+  Info,
 } from "lucide-react";
 import { Suspense } from "react";
 import { categorizeSkill } from "@/lib/skill-helpers";
@@ -70,10 +73,22 @@ async function TrendingContent({
       ? (parsedParams.sortBy as "demand" | "salary")
       : "demand";
 
-  const [trendingSkills, stats] = await Promise.all([
-    getTrendingSkills({ timeframe, limit: 24, sortBy }),
+  const [trendingSkillsRaw, stats] = await Promise.all([
+    getTrendingSkills(timeframe, 24),
     getTrendingStats(timeframe),
   ]);
+
+  // Transform snake_case to camelCase for UI
+  const trendingSkills = trendingSkillsRaw.map((s) => ({
+    name: s.name,
+    currentCount: s.current_count,
+    previousCount: s.previous_count,
+    currentSalary: s.current_salary,
+    previousSalary: s.previous_salary,
+    growthPercentage: s.growth_percentage,
+    salaryChange: s.salary_change,
+    trendStatus: s.trend_status,
+  }));
 
   // Separate breakout skills from regular trending
   const breakoutSkills = trendingSkills.filter(
@@ -85,6 +100,22 @@ async function TrendingContent({
 
   return (
     <div className="space-y-8">
+      {/* Snapshot Comparison Info Banner */}
+      <div className="glass-card p-4 border-l-4 border-blue-500">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+          <div className="space-y-1">
+            <p className="font-semibold">Snapshot Comparison</p>
+            <p className="text-sm text-muted-foreground">
+              Trends show changes between <strong>April 2024</strong> (29.9k
+              jobs) and <strong>February 2026</strong> (2.1k jobs) data
+              snapshots. Growth percentages reflect demand shifts across this
+              timeframe.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Data Freshness Indicator */}
       {stats.dataAsOf && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

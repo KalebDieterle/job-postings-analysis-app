@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getSkillDetails, getSkillTrendingData } from "@/db/queries";
 import { SkillTimelineChart } from "@/components/ui/charts/skill-timeline-chart";
 import { StatCard } from "@/components/ui/stat-card";

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // be sure to convert to condensed components later
 
 import { notFound } from "next/navigation";

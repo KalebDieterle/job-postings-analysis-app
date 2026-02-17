@@ -1,6 +1,13 @@
 "use client";
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 interface ExperienceData {
   level: string | null;
@@ -18,19 +25,19 @@ const COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#c084fc", "#d8b4fe"];
 const LEVEL_LABELS: Record<string, string> = {
   "Entry level": "Entry Level",
   "Mid-Senior level": "Mid Level",
-  "Associate": "Associate",
-  "Director": "Director",
-  "Executive": "Executive",
-  "Internship": "Internship",
+  Associate: "Associate",
+  Director: "Director",
+  Executive: "Executive",
+  Internship: "Internship",
   "Not Applicable": "Not Specified",
 };
 
-export function SharedExperienceChart({ 
-  data, 
+export function SharedExperienceChart({
+  data,
   height = 350,
-  showInnerRadius = true 
+  showInnerRadius = true,
 }: SharedExperienceChartProps) {
-  const filteredData = data.filter(item => item.level !== null);
+  const filteredData = data.filter((item) => item.level !== null);
   const total = filteredData.reduce((sum, item) => sum + item.count, 0);
 
   const formattedData = filteredData.map((item) => ({
@@ -60,15 +67,19 @@ export function SharedExperienceChart({
         <Tooltip
           content={({ active, payload }) => {
             if (active && payload && payload.length) {
+              const entry = payload[0];
+              const value = entry?.value as number | undefined;
+              const percentage = (entry?.payload as { percentage?: string })
+                ?.percentage;
               return (
                 <div className="rounded-lg border bg-background p-2 shadow-sm">
                   <div className="grid gap-2">
                     <div className="flex flex-col">
                       <span className="text-xs text-muted-foreground">
-                        {payload[0].name}
+                        {entry.name}
                       </span>
                       <span className="font-bold">
-                        {payload[0].value.toLocaleString()} jobs ({payload[0].payload.percentage}%)
+                        {value?.toLocaleString() ?? 0} jobs ({percentage}%)
                       </span>
                     </div>
                   </div>

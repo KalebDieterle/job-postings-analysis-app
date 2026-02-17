@@ -10,6 +10,8 @@ import {
   findOrCreateCompany,
   batchInsertJobs,
   validateJobData,
+  extractAndInsertSkills,
+  mapCategoryToIndustry,
 } from '@/lib/adzuna-import-helpers';
 import {
   getAllUsage,
@@ -30,43 +32,11 @@ const ADZUNA_LOCATIONS = (process.env.ADZUNA_LOCATIONS || 'us')
   .filter(Boolean);
 
 const ADZUNA_RESULTS_PER_PAGE = parseInt(process.env.ADZUNA_RESULTS_PER_PAGE || '50', 10);
-const ADZUNA_MAX_RESULTS = parseInt(process.env.ADZUNA_MAX_RESULTS || '200', 10);
+const ADZUNA_MAX_RESULTS = parseInt(process.env.ADZUNA_MAX_RESULTS || '500', 10);
 const ADZUNA_RATE_LIMIT_MS = parseInt(process.env.ADZUNA_RATE_LIMIT_MS || '2500', 10);
 const ADZUNA_DAYS_BACK = parseInt(process.env.ADZUNA_DAYS_BACK || '2', 10);
 const ADZUNA_DAILY_LIMIT = parseInt(process.env.ADZUNA_DAILY_LIMIT || '240', 10);
 
-/**
- * SAFE_API_START_MINUTE: Prevents API contention during global quota resets
- * 
- * WHY: Adzuna API quotas reset at midnight UTC. If multiple CI jobs start at
- * minute 00, they all race for the same quota pool, potentially causing conflicts.
- * 
- * By waiting until minute 17, we avoid the rush and get cleaner quota tracking.
- */
-const SAFE_API_START_MINUTE = 17;
-
-/**
- * Wait until safe minute to avoid API contention
- * 
- * If current minute < SAFE_API_START_MINUTE, waits until that minute.
- * Prevents race conditions when quota resets at midnight.
- */
-async function waitForSafeStartTime(): Promise<void> {
-  const now = new Date();
-  const currentMinute = now.getMinutes();
-  
-  if (currentMinute < SAFE_API_START_MINUTE) {
-    const waitMs = (SAFE_API_START_MINUTE - currentMinute) * 60 * 1000;
-    const waitMinutes = Math.ceil(waitMs / 60000);
-    
-    console.log(`⏰ Current time: ${now.toISOString()}`);
-    console.log(`   Waiting ${waitMinutes} minute(s) until minute ${SAFE_API_START_MINUTE} to avoid API contention...\n`);
-    
-    await new Promise(resolve => setTimeout(resolve, waitMs));
-    
-    console.log(`✅ Safe start time reached. Beginning import...\n`);
-  }
-}
 
 /**
  * Check if database has required constraints
@@ -126,9 +96,6 @@ async function importFromAdzuna() {
   }
   console.log('✅ Database constraints verified\n');
 
-  // Wait for safe start time (avoid API reset contention)
-  await waitForSafeStartTime();
-
   // Load and check usage stats from database
   const usageStats = await getAllUsage();
   console.log('📊 Current API Usage (from database):');
@@ -161,6 +128,8 @@ async function importFromAdzuna() {
   let totalJobsUpdated = 0;
   let totalJobsFailed = 0;
   let totalCompaniesProcessed = 0;
+  let totalSkillsInserted = 0;
+  let totalIndustriesMapped = 0;
   const uniqueCompanies = new Set<string>();
 
   try {
@@ -222,12 +191,14 @@ async function importFromAdzuna() {
             console.log(`   ⚠️  Skipped ${invalidCount} invalid jobs`);
           }
 
-          // Process companies
+          // Process companies (pass lat/lng from API response)
           for (const job of validJobs) {
             try {
               const companyId = await findOrCreateCompany(
                 job.company.display_name,
-                job.location.display_name
+                job.location.display_name,
+                job.latitude ?? null,
+                job.longitude ?? null
               );
               uniqueCompanies.add(companyId);
             } catch (error: any) {
@@ -244,6 +215,27 @@ async function importFromAdzuna() {
           totalJobsFailed += insertResult.failed;
 
           console.log(`   💾 Inserted: ${insertResult.inserted}, Updated: ${insertResult.updated}, Failed: ${insertResult.failed}`);
+
+          // Extract and insert skills for all jobs in this batch
+          const jobsForSkills = transformedJobs.map(j => ({
+            job_id: j.job_id,
+            title: j.title,
+            description: j.description,
+          }));
+          const skillResult = await extractAndInsertSkills(jobsForSkills);
+          totalSkillsInserted += skillResult.inserted;
+          if (skillResult.inserted > 0) {
+            console.log(`   🧠 Skills: ${skillResult.inserted} associations created`);
+          }
+
+          // Map categories to industries
+          for (const job of validJobs) {
+            if (job.category?.tag && job.category?.label) {
+              const jobId = `adzuna_${job.id}`;
+              await mapCategoryToIndustry(jobId, job.category.tag, job.category.label);
+              totalIndustriesMapped++;
+            }
+          }
 
           // Check if we should continue
           if (roleJobsFetched >= ADZUNA_MAX_RESULTS) {
@@ -281,6 +273,8 @@ async function importFromAdzuna() {
     console.log(`   Jobs updated: ${totalJobsUpdated}`);
     console.log(`   Jobs failed: ${totalJobsFailed}`);
     console.log(`   Unique companies: ${uniqueCompanies.size}`);
+    console.log(`   Skills associations: ${totalSkillsInserted}`);
+    console.log(`   Industries mapped: ${totalIndustriesMapped}`);
     console.log('');
 
     // Update usage stats in database

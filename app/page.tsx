@@ -1,12 +1,12 @@
 import Header from "../components/ui/Header";
-import { 
-  getTrendingSkills, 
-  getTotalStats, 
-  getIndustryBreakdown, 
-  getTopHiringCompanies, 
-  getSalaryInsights, 
+import {
+  getTrendingSkills,
+  getTotalStats,
+  getIndustryBreakdown,
+  getTopHiringCompanies,
+  getSalaryInsights,
   getRecentPostings,
-  getExperienceDistribution 
+  getExperienceDistribution,
 } from "@/db/queries";
 
 // Import home page components
@@ -19,7 +19,7 @@ import { RecentActivityFeed } from "@/components/ui/home/recent-activity-feed";
 import { QuickActionGrid } from "@/components/ui/home/quick-action-grid";
 import { EnhancedTrendingSkills } from "@/components/ui/home/enhanced-trending-skills";
 
-export const revalidate = 86400; // 24 hours
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   // Fetch all data in parallel
@@ -38,14 +38,15 @@ export default async function Home() {
     getSalaryInsights(),
     getRecentPostings(),
     getExperienceDistribution(),
-    getTrendingSkills({ limit: 10 }),
+    getTrendingSkills(30, 10),
   ]);
 
   // Format trending skills for the enhanced chart
   const trendingSkills = trendingSkillsRaw.map((s: any) => ({
     skill_name: s.name ?? s.skill_name ?? "",
     current_count: s.currentCount ?? s.count ?? 0,
-    previous_count: s.previousCount ?? Math.floor((s.currentCount ?? s.count ?? 0) * 0.7), // fallback estimate
+    previous_count:
+      s.previousCount ?? Math.floor((s.currentCount ?? s.count ?? 0) * 0.7), // fallback estimate
     growth_rate: s.growthRate ?? 0,
   }));
 

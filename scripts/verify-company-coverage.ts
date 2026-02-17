@@ -47,7 +47,8 @@ async function main() {
   } else if (orphanCount === 0) {
     console.log("\n⚠️  All jobs matched, but many ghost companies remain.\n");
   } else {
-    console.log(`\n❌ ${orphanCount} orphaned jobs still exist.\n`);
+    console.error(`\n❌ ${orphanCount} orphaned jobs still exist.\n`);
+    process.exit(1);
   }
 }
 

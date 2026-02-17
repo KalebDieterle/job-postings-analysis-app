@@ -1,14 +1,16 @@
+export const dynamic = "force-dynamic";
+
 import React, { Suspense } from "react";
-import { 
-  getTopJobRoles, 
-  getTopRolesTimeSeries, 
-  getAverageSalary, 
-  getTopLocation, 
+import {
+  getTopJobRoles,
+  getTopRolesTimeSeries,
+  getAverageSalary,
+  getTopLocation,
   getRemotePercentage,
   getRoleDistribution,
   getSkillsFrequency,
   getPostingTimeline,
-  getExperienceDistribution
+  getExperienceDistribution,
 } from "@/db/queries";
 import RoleCard from "@/components/ui/role-card";
 import { PaginationControls } from "@/components/ui/skills/pagination-controls";
@@ -48,13 +50,13 @@ export default async function RolesPage({ searchParams }: PageProps) {
     console.log("📈 [RolesPage] Fetching analytics...");
     const analyticsStart = Date.now();
     const [
-      avgSalary, 
-      topLocation, 
-      remotePercentage, 
+      avgSalary,
+      topLocation,
+      remotePercentage,
       roleDistribution,
       skillsFrequency,
       postingTimeline,
-      experienceDistribution
+      experienceDistribution,
     ] = await Promise.all([
       getAverageSalary(filters),
       getTopLocation(filters),
@@ -97,9 +99,16 @@ export default async function RolesPage({ searchParams }: PageProps) {
 
         {/* Stats Grid */}
         <StatsGrid
-          totalRoles={roles.length > 0 ? roleDistribution.reduce((sum, r) => sum + r.count, 0) : 0}
+          totalRoles={
+            roles.length > 0
+              ? roleDistribution.reduce((sum, r) => sum + r.count, 0)
+              : 0
+          }
           avgSalary={avgSalary}
-          topLocation={topLocation}
+          topLocation={{
+            location: topLocation?.location ?? "N/A",
+            count: topLocation?.count ?? 0,
+          }}
           remotePercentage={remotePercentage}
         />
 
@@ -144,10 +153,13 @@ export default async function RolesPage({ searchParams }: PageProps) {
             buildPageUrl={(pageNum: number) => {
               const params = new URLSearchParams();
               if (filters.q) params.set("q", String(filters.q));
-              if (filters.location) params.set("location", String(filters.location));
-              if (filters.minSalary) params.set("minSalary", String(filters.minSalary));
+              if (filters.location)
+                params.set("location", String(filters.location));
+              if (filters.minSalary)
+                params.set("minSalary", String(filters.minSalary));
               if (filters.experience && Array.isArray(filters.experience)) {
-                for (const e of filters.experience) params.append("experience", String(e));
+                for (const e of filters.experience)
+                  params.append("experience", String(e));
               }
               params.set("page", String(pageNum));
               return `/roles?${params.toString()}`;
@@ -158,7 +170,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
         {/* Advanced Analytics Section */}
         <div className="mt-8 space-y-6">
           <h2 className="text-2xl font-bold">Detailed Analytics</h2>
-          
+
           {/* Two column layout for charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PostingTimelineChart data={postingTimeline} />

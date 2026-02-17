@@ -27,6 +27,8 @@ export interface AdzunaJob {
   salary_is_predicted?: string;
   contract_type?: string;
   redirect_url: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface AdzunaSearchResponse {

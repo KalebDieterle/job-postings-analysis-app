@@ -2,8 +2,9 @@
 import { createHash } from 'crypto';
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { postings, companies } from '@/db/schema';
+import { postings, companies, job_skills, job_industries, industries } from '@/db/schema';
 import type { AdzunaJob } from './adzuna/types';
+import { matchSkills } from './adzuna/utils';
 
 /**
  * Rate limiter class to respect Adzuna API limits:
@@ -97,34 +98,22 @@ export function normalizeCompanyName(companyName: string, locationForGeneric?: s
 }
 
 /**
- * Generate a deterministic company ID from company name + location
- * Uses SHA-256 hash of: normalized_name + city + state
+ * Generate a deterministic company ID from company name only.
+ * Uses SHA-256 hash of the normalized name.
  * 
- * WHY: Prevents company identity collisions when multiple companies share the same name
- * but operate in different locations (e.g. "ABC Company" in CA vs TX)
+ * DESIGN TRADE-OFF (portfolio/demo project):
+ * Name-only hashing means "ABC Construction" in TX and CA would share one record.
+ * This is acceptable for a demo project because:
+ * - National companies (Jobot, MAXIMUS, Boeing) are clearly the same entity
+ * - The alternative (name+location) created 1,465+ duplicate records
+ * - For a production system, consider name+state or a company registry lookup
  * 
  * @param companyName - Raw company name from job posting
- * @param city - City name (optional, normalized to lowercase)
- * @param state - State abbreviation (optional, normalized to lowercase)
  * @returns 16-character hex hash
  */
-export function generateCompanyId(
-  companyName: string,
-  city?: string | null,
-  state?: string | null
-): string {
-  // Get normalized company name (may include location for generic names)
+export function generateCompanyId(companyName: string): string {
   const normalized = normalizeCompanyName(companyName);
-  
-  // Normalize location components (lowercase, trim)
-  const cityNorm = (city || '').toLowerCase().trim();
-  const stateNorm = (state || '').toLowerCase().trim();
-  
-  // Create composite key: name|city|state
-  // Even if city/state are empty, we include the separator for consistency
-  const composite = `${normalized}|${cityNorm}|${stateNorm}`;
-  
-  return createHash('sha256').update(composite).digest('hex').substring(0, 16);
+  return createHash('sha256').update(normalized).digest('hex').substring(0, 16);
 }
 
 /**
@@ -162,6 +151,7 @@ export function transformAdzunaJob(job: AdzunaJob, country: string = 'US'): {
   company_id: string;
   title: string;
   description: string | null;
+  skills_desc: string | null;
   location: string;
   min_salary: number | null;
   max_salary: number | null;
@@ -188,8 +178,8 @@ export function transformAdzunaJob(job: AdzunaJob, country: string = 'US'): {
   // Parse location to extract city and state
   const location = parseLocation(locationDisplay);
   
-  // Generate company ID using parsed city+state (not full location string)
-  const companyId = generateCompanyId(companyName, location.city, location.state);
+  // Generate company ID (name-only, no location)
+  const companyId = generateCompanyId(companyName);
   
   // Adzuna salaries are typically annual, but we'll store them as-is
   const minSalary = job.salary_min ?? null;
@@ -208,6 +198,7 @@ export function transformAdzunaJob(job: AdzunaJob, country: string = 'US'): {
     company_id: companyId,
     title: job.title,
     description: job.description || null,
+    skills_desc: job.description || null, // Store raw description for future re-processing
     location: job.location.display_name,
     min_salary: minSalary,
     max_salary: maxSalary,
@@ -231,15 +222,18 @@ export function transformAdzunaJob(job: AdzunaJob, country: string = 'US'): {
 }
 
 /**
- * Find existing company by company_id or create a new one
- * Returns the company_id
+ * Find existing company by company_id or create a new one.
+ * Returns the company_id.
  * 
- * CRITICAL: Company ID now includes location (city+state) to prevent identity collisions
- * Same company name in different locations = different company_id
+ * Company ID is derived from name only (no location). This means the same
+ * company posting from multiple cities shares one record. Location stored
+ * on the record is from the first job seen (not updated on subsequent matches).
  */
 export async function findOrCreateCompany(
   companyName: string,
-  locationDisplay: string
+  locationDisplay: string,
+  lat?: number | null,
+  lng?: number | null
 ): Promise<string> {
   // Validate input
   if (!companyName || companyName.trim() === '') {
@@ -250,8 +244,8 @@ export async function findOrCreateCompany(
   // Parse location to extract city and state
   const location = parseLocation(locationDisplay);
   
-  // Generate deterministic company ID (now includes city+state for uniqueness)
-  const companyId = generateCompanyId(companyName, location.city, location.state);
+  // Generate deterministic company ID (name-only for demo simplicity)
+  const companyId = generateCompanyId(companyName);
   const normalizedName = normalizeCompanyName(companyName, locationDisplay);
   
   // STEP 1: Check if company exists by company_id (PRIMARY KEY lookup - fastest)
@@ -265,7 +259,20 @@ export async function findOrCreateCompany(
     .limit(1);
 
   if (existingById.length > 0) {
-    // Company found by ID
+    // Company found by ID — update lat/lng if currently null and we have values
+    if (lat != null && lng != null) {
+      const existing = await db
+        .select({ lat: companies.lat, lng: companies.lng })
+        .from(companies)
+        .where(eq(companies.company_id, companyId))
+        .limit(1);
+      
+      if (existing.length > 0 && existing[0].lat == null && existing[0].lng == null) {
+        await db.update(companies)
+          .set({ lat, lng })
+          .where(eq(companies.company_id, companyId));
+      }
+    }
     return existingById[0].company_id;
   }
 
@@ -282,8 +289,8 @@ export async function findOrCreateCompany(
       zip_code: null,
       address: null,
       url: null,
-      lat: null,
-      lng: null,
+      lat: lat ?? null,
+      lng: lng ?? null,
     });
     
     console.log(`✅ Created new company: ${companyName} (${location.city}, ${location.state}) → ${companyId}`);
@@ -437,4 +444,96 @@ export function validateJobData(job: AdzunaJob): {
 
   const isValid = warnings.length === 0;
   return { isValid, warnings };
+}
+
+/**
+ * Extract skills from job titles and descriptions, then insert into job_skills.
+ * Uses the SKILL_KEYWORDS dictionary from lib/adzuna/utils.ts.
+ */
+export async function extractAndInsertSkills(
+  jobs: { job_id: string; title: string; description: string | null }[]
+): Promise<{ inserted: number; skipped: number }> {
+  let inserted = 0;
+  let skipped = 0;
+
+  // Load valid skill_abrs from the database
+  const dbSkills = await db.execute(sql`SELECT skill_abr FROM skills`);
+  const validAbrs = new Set(dbSkills.rows.map((r: any) => r.skill_abr));
+
+  // Collect all (job_id, skill_abr) pairs
+  const allPairs: { job_id: string; skill_abr: string }[] = [];
+
+  for (const job of jobs) {
+    const matched = matchSkills(job.title, job.description || '');
+    for (const skillAbr of matched) {
+      if (validAbrs.has(skillAbr)) {
+        allPairs.push({ job_id: job.job_id, skill_abr: skillAbr });
+      }
+    }
+  }
+
+  if (allPairs.length === 0) {
+    return { inserted: 0, skipped: 0 };
+  }
+
+  // Batch insert with ON CONFLICT DO NOTHING
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < allPairs.length; i += BATCH_SIZE) {
+    const batch = allPairs.slice(i, i + BATCH_SIZE);
+    const valuesClauses = batch.map(
+      p => sql`(${p.job_id}, ${p.skill_abr})`
+    );
+
+    try {
+      const result = await db.execute(sql`
+        INSERT INTO job_skills (job_id, skill_abr)
+        VALUES ${sql.join(valuesClauses, sql`, `)}
+        ON CONFLICT DO NOTHING
+      `);
+      const batchInserted = Number(result.rowCount ?? batch.length);
+      inserted += batchInserted;
+      skipped += batch.length - batchInserted;
+    } catch (error: any) {
+      console.error(`   ❌ Skill insert batch error:`, error.message);
+      skipped += batch.length;
+    }
+  }
+
+  return { inserted, skipped };
+}
+
+/**
+ * Map Adzuna category to industry and insert into job_industries.
+ * Creates new industry record if category tag doesn't exist yet.
+ */
+export async function mapCategoryToIndustry(
+  jobId: string,
+  categoryTag: string,
+  categoryLabel: string
+): Promise<void> {
+  if (!categoryTag || !categoryLabel) return;
+
+  try {
+    // Check if industry exists
+    const existing = await db.execute(
+      sql`SELECT industry_id FROM industries WHERE industry_id = ${categoryTag} LIMIT 1`
+    );
+
+    if (existing.rows.length === 0) {
+      // Create new industry
+      await db.execute(
+        sql`INSERT INTO industries (industry_id, industry_name) VALUES (${categoryTag}, ${categoryLabel}) ON CONFLICT DO NOTHING`
+      );
+    }
+
+    // Insert job_industries mapping
+    await db.execute(
+      sql`INSERT INTO job_industries (job_id, industry_id) VALUES (${jobId}, ${categoryTag}) ON CONFLICT DO NOTHING`
+    );
+  } catch (error: any) {
+    // Silently skip conflicts
+    if (!error.message.includes('duplicate key')) {
+      console.error(`   ⚠️  Industry mapping error for ${jobId}:`, error.message);
+    }
+  }
 }

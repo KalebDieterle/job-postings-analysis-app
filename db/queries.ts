@@ -4,7 +4,7 @@ import {
   roleAliases, top_companies, postings, employee_counts, company_industries 
 } from './schema';
 import { 
-  eq, sql, count, desc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull 
+  eq, sql, count, desc, asc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull 
 } from 'drizzle-orm';
 
 const canonicalRole = (titleCol: any) =>
@@ -496,17 +496,53 @@ export async function getAllCompanyData({
   offset = 0,
   search = "",
   location = "",
-}: { limit?: number; offset?: number; search?: string; location?: string } = {}) {
+  companySize = [] as string[],
+  minSalary = 0,
+  minPostings = 0,
+  sort = "postings",
+}: {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  location?: string;
+  companySize?: string[];
+  minSalary?: number;
+  minPostings?: number;
+  sort?: string;
+} = {}) {
   const dbLimit = limit + 1;
-  let topQuery: any = db
-    .select({
-      company_id: companies.company_id,
-      name: companies.name,
-      postings_count: sql<number>`COUNT(${postings.job_id})::int`.as('postings_count'),
-    })
-    .from(companies)
-    .leftJoin(postings, eq(companies.name, postings.company_name));
 
+  // Build size filter conditions for the HAVING clause
+  const sizeConditions: ReturnType<typeof sql>[] = [];
+  if (companySize.length > 0) {
+    const sizeRanges = companySize.map((s) => {
+      switch (s) {
+        case "1-10": return sql`MAX(${employee_counts.employee_count}) BETWEEN 1 AND 10`;
+        case "11-50": return sql`MAX(${employee_counts.employee_count}) BETWEEN 11 AND 50`;
+        case "51-200": return sql`MAX(${employee_counts.employee_count}) BETWEEN 51 AND 200`;
+        case "201-500": return sql`MAX(${employee_counts.employee_count}) BETWEEN 201 AND 500`;
+        case "501-1000": return sql`MAX(${employee_counts.employee_count}) BETWEEN 501 AND 1000`;
+        case "1001-5000": return sql`MAX(${employee_counts.employee_count}) BETWEEN 1001 AND 5000`;
+        case "5001-10000": return sql`MAX(${employee_counts.employee_count}) BETWEEN 5001 AND 10000`;
+        case "10001+": return sql`MAX(${employee_counts.employee_count}) > 10000`;
+        default: return sql`TRUE`;
+      }
+    });
+    // OR logic: match any selected size range
+    sizeConditions.push(sql`(${sql.join(sizeRanges, sql` OR `)})`);
+  }
+
+  // Determine sort order
+  const sortOrder = (() => {
+    switch (sort) {
+      case "salary": return desc(sql`COALESCE(AVG(${postings.yearly_max_salary})::int, 0)`);
+      case "name": return asc(companies.name);
+      case "size": return desc(sql`MAX(${employee_counts.employee_count})`);
+      default: return desc(sql`COUNT(${postings.job_id})`);
+    }
+  })();
+
+  // WHERE conditions
   const conditions = [
     and(
       sql`LOWER(${companies.name}) != 'confidential'`,
@@ -517,30 +553,43 @@ export async function getAllCompanyData({
   ];
 
   if (search) conditions.push(ilike(companies.name, `%${search}%`));
-  if (location) conditions.push(eq(companies.country, location));
+  if (location) conditions.push(ilike(companies.country, `%${location}%`));
 
-  topQuery = topQuery.where(and(...conditions))
-    .groupBy(companies.company_id, companies.name)
-    .orderBy(desc(sql`COUNT(${postings.job_id})`))
-    .limit(dbLimit)
-    .offset(offset);
+  // HAVING conditions for aggregate filters
+  const havingConditions: ReturnType<typeof sql>[] = [];
+  if (minPostings > 0) {
+    havingConditions.push(sql`COUNT(${postings.job_id}) >= ${minPostings}`);
+  }
+  if (minSalary > 0) {
+    havingConditions.push(sql`COALESCE(AVG(${postings.yearly_max_salary})::int, 0) >= ${minSalary}`);
+  }
+  havingConditions.push(...sizeConditions);
 
-  const topCompaniesCte = db.$with("top_companies").as(topQuery);
-
-  return await db
-    .with(topCompaniesCte)
+  // Use a single query with all joins to support aggregate-based features
+  const baseQuery = db
     .select({
-      company_id: topCompaniesCte.company_id,
-      name: topCompaniesCte.name,
+      company_id: companies.company_id,
+      name: companies.name,
       country: companies.country,
       company_size: sql<number>`MAX(${employee_counts.employee_count})`,
-      postings_count: topCompaniesCte.postings_count,
+      postings_count: sql<number>`COUNT(DISTINCT ${postings.job_id})::int`,
+      avg_salary: sql<number>`COALESCE(AVG(${postings.yearly_max_salary})::int, 0)`,
     })
-    .from(topCompaniesCte)
-    .leftJoin(companies, eq(topCompaniesCte.company_id, companies.company_id))
+    .from(companies)
+    .leftJoin(postings, eq(companies.name, postings.company_name))
     .leftJoin(employee_counts, eq(companies.company_id, employee_counts.company_id))
-    .groupBy(topCompaniesCte.company_id, topCompaniesCte.name, companies.country, topCompaniesCte.postings_count)
-    .orderBy(desc(topCompaniesCte.postings_count));
+    .where(and(...conditions))
+    .groupBy(companies.company_id, companies.name, companies.country);
+
+  // Apply HAVING if any aggregate filters
+  const queryWithHaving = havingConditions.length > 0
+    ? baseQuery.having(and(...havingConditions.map(c => c)))
+    : baseQuery;
+
+  return await queryWithHaving
+    .orderBy(sortOrder)
+    .limit(dbLimit)
+    .offset(offset);
 }
 
 // ===========================
@@ -833,37 +882,53 @@ export async function getJobsByLocation() {
  * Get aggregated stats by city across all companies
  */
 export async function getJobsByCity() {
+  // Join with companies table to get geocoded lat/lng coordinates
+  // Uses postings.location for grouping since it has 100% coverage
   return await db
     .select({
-      city: companies.city,
-      state: sql<string>`COALESCE(
-        MIN(${companies.state}) FILTER (WHERE LENGTH(${companies.state}) <= 3 AND ${companies.state} != '0'),
-        MIN(${companies.state}) FILTER (WHERE ${companies.state} != '0')
-      )`,
-      country: companies.country,
-      lat: sql<number>`AVG(${companies.lat})`,
-      lng: sql<number>`AVG(${companies.lng})`,
+      location: postings.location,
+      city: sql<string>`
+        CASE 
+          WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN 
+            TRIM(SPLIT_PART(${postings.location}, ',', 1))
+          WHEN ${postings.location} ~ '^[^,]+, [^,]+$' THEN 
+            TRIM(SPLIT_PART(${postings.location}, ',', 1))
+          ELSE ${postings.location}
+        END
+      `,
+      state: sql<string>`
+        CASE 
+          WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN 
+            TRIM(SPLIT_PART(${postings.location}, ',', 2))
+          WHEN ${postings.location} ~ '^[^,]+, [^,]+$' THEN 
+            TRIM(SPLIT_PART(${postings.location}, ',', 2))
+          ELSE NULL
+        END
+      `,
+      country: postings.country,
+      // Get coordinates from companies table (will be null until geocoding completes)
+      lat: sql<number | null>`MAX(${companies.lat})`,
+      lng: sql<number | null>`MAX(${companies.lng})`,
       jobCount: sql<number>`count(distinct ${postings.job_id})::int`,
       companyCount: sql<number>`count(distinct ${postings.company_id})::int`,
-      avgSalary: sql<number>`round(avg(case when ${postings.yearly_min_salary} > 0 and ${postings.yearly_max_salary} > 0 then (${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2 end))::int`,
-      // Fix: cast text to float for ratio calculation
+      // Sanity filter: exclude salaries < $10k or > $1.5M to avoid outliers
+      avgSalary: sql<number>`round(avg(case when ${postings.yearly_min_salary} > 10000 and ${postings.yearly_max_salary} > 10000 and ${postings.yearly_max_salary} < 1500000 then (${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2 end))::int`,
       remoteRatio: sql<number>`(
         count(*) FILTER (WHERE ${postings.remote_allowed} IN ('1', 'true'))::float / NULLIF(count(*), 0)
       )`,
     })
-    .from(companies)
-    .innerJoin(
-      postings,
+    .from(postings)
+    .leftJoin(
+      companies,
       sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`
     )
     .where(
       and(
-        isNotNull(companies.city),
-        isNotNull(companies.lat),
-        isNotNull(companies.lng)
+        isNotNull(postings.location),
+        sql`${postings.location} != ''`
       )
     )
-    .groupBy(companies.city, companies.state, companies.country)
+    .groupBy(postings.location, postings.country)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`));
 }
 
@@ -875,17 +940,23 @@ export async function getJobsByCity() {
  * Get jobs by country for choropleth map
  */
 export async function getJobsByCountry() {
+  // Uses postings.country directly for better coverage
+  // Uses calculated salary from yearly_min/max for consistency
   return await db
     .select({
-      country: companies.country,
-      jobCount: sql<number>`count(distinct ${postings.job_id})`.as('job_count'),
-      avgSalary: sql<number>`avg(${postings.normalized_salary}::numeric)`.as('avg_salary'),
-      cities: sql<string[]>`array_agg(distinct ${companies.city})`.as('cities'),
+      country: postings.country,
+      jobCount: sql<number>`count(distinct ${postings.job_id})::int`.as('job_count'),
+      avgSalary: sql<number>`round(avg(case when ${postings.yearly_min_salary} > 0 and ${postings.yearly_max_salary} > 0 then (${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2 end))::int`.as('avg_salary'),
+      cities: sql<string[]>`array_agg(distinct ${postings.location})`.as('cities'),
     })
-    .from(companies)
-    .innerJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
-    .where(isNotNull(companies.country))
-    .groupBy(companies.country)
+    .from(postings)
+    .where(
+      and(
+        isNotNull(postings.country),
+        sql`${postings.country} != ''`
+      )
+    )
+    .groupBy(postings.country)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`));
 }
 
@@ -999,6 +1070,8 @@ export async function getRecentJobsByLocation(locationSlug: string, limit = 20) 
 export async function getTrendingSkills(timeframeDays: number = 30, limit: number = 10) {
   const days = Number.isFinite(timeframeDays) ? timeframeDays : 30;
 
+  console.log('🔍 getTrendingSkills called with:', { timeframeDays, limit, computedDays: days });
+
   const result = await db.execute<{
     name: string;
     current_count: number;
@@ -1009,10 +1082,8 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
     salary_change: number;
     trend_status: 'breakout' | 'rising' | 'falling';
   }>(sql`
-    WITH date_bounds AS (
-      SELECT MAX(listed_time) as max_date FROM "postings"
-    ),
-    current_period AS (
+    WITH current_period AS (
+      -- Feb 2026 snapshot (latest data: 2,108 postings)
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
@@ -1020,12 +1091,12 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
-      CROSS JOIN date_bounds db
-      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days}))
+      WHERE p.listed_time >= '2026-02-13' AND p.listed_time < '2026-02-16'
       GROUP BY s.skill_name
-      HAVING COUNT(*) > 5
+      HAVING COUNT(*) > 0
     ),
     previous_period AS (
+      -- April 2024 snapshot (baseline: 29,932 postings)
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
@@ -1033,9 +1104,7 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
-      CROSS JOIN date_bounds db
-      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days * 2}))
-        AND p.listed_time < (db.max_date - (INTERVAL '1 day' * ${days}))
+      WHERE p.listed_time >= '2024-04-05' AND p.listed_time < '2024-04-21'
       GROUP BY s.skill_name
     )
     SELECT 
@@ -1060,6 +1129,11 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
     LIMIT ${limit}
   `);
 
+  console.log('📊 getTrendingSkills returned', result.rows.length, 'skills');
+  if (result.rows.length > 0) {
+    console.log('  Sample:', result.rows[0]);
+  }
+
   return result.rows;
 }
 
@@ -1071,6 +1145,8 @@ export async function getTrendingStats(timeframe: number = 30) {
   // 1. Safety check for the timeframe input
   const days = Number.isFinite(timeframe) ? timeframe : 30;
 
+  console.log('📈 getTrendingStats called with:', { timeframe, computedDays: days });
+
   const result = await db.execute<{
     top_gainer: string | null;
     top_gainer_growth: number | null;
@@ -1080,11 +1156,8 @@ export async function getTrendingStats(timeframe: number = 30) {
     new_entries: number | null;
     max_date: string | null;
   }>(sql`
-    WITH date_bounds AS (
-      -- Get the most recent posting date to use as a baseline
-      SELECT MAX(p.listed_time) as max_date FROM "postings" p
-    ),
-    current_period AS (
+    WITH current_period AS (
+      -- Feb 2026 snapshot (latest data: 2,108 postings)
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
@@ -1092,13 +1165,12 @@ export async function getTrendingStats(timeframe: number = 30) {
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
-      CROSS JOIN date_bounds db
-      -- Filter for the current window (e.g., last 30 days)
-      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days}))
+      WHERE p.listed_time >= '2026-02-13' AND p.listed_time < '2026-02-16'
       GROUP BY s.skill_name
-      HAVING COUNT(*) > 5
+      HAVING COUNT(*) > 0
     ),
     previous_period AS (
+      -- April 2024 snapshot (baseline: 29,932 postings)
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
@@ -1106,10 +1178,7 @@ export async function getTrendingStats(timeframe: number = 30) {
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
-      CROSS JOIN date_bounds db
-      -- Filter for the previous window (e.g., 60 to 30 days ago)
-      WHERE p.listed_time >= (db.max_date - (INTERVAL '1 day' * ${days * 2}))
-        AND p.listed_time < (db.max_date - (INTERVAL '1 day' * ${days}))
+      WHERE p.listed_time >= '2024-04-05' AND p.listed_time < '2024-04-21'
       GROUP BY s.skill_name
     ),
     growth_data AS (
@@ -1134,10 +1203,12 @@ export async function getTrendingStats(timeframe: number = 30) {
       (SELECT name FROM growth_data ORDER BY salary_change DESC LIMIT 1) as highest_salary_jump,
       COALESCE((SELECT salary_change FROM growth_data ORDER BY salary_change DESC LIMIT 1), 0) as highest_salary_increase,
       (SELECT COUNT(*) FROM growth_data WHERE previous_count = 0)::int as new_entries,
-      TO_CHAR((SELECT max_date FROM date_bounds), 'Mon YYYY') as max_date
+      'Feb 2026 vs Apr 2024' as max_date
   `);
 
   const row = result.rows[0];
+
+  console.log('📊 getTrendingStats raw result:', row);
 
   /**
    * 2. Map snake_case database fields to the camelCase fields 

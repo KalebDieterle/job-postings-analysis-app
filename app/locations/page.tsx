@@ -1,10 +1,12 @@
+export const dynamic = "force-dynamic";
+
 import { getJobsByCity, getJobsByCountry } from "@/db/queries";
 import LocationsHeader from "@/components/ui/locations/locations-header";
 import StatsCards from "@/components/ui/locations/stats-card";
 import GlobalHeatMapCard from "@/components/ui/locations/global-heatmap-card";
 import { PaginationControls } from "@/components/ui/skills/pagination-controls";
-import { FilterBar } from "@/components/ui/filters/filter-bar";
-import { searchParamsCache } from "@/lib/search-params";
+import { LocationsFilterBar } from "@/components/ui/filters/locations-filter-bar";
+import { locationsSearchParamsCache } from "@/lib/locations-search-params";
 import { Card, CardContent } from "@/components/ui/card";
 import { MapPin, Building2, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -243,7 +245,7 @@ function deduplicateLocations(locations: any[]): any[] {
 }
 
 export default async function LocationsPage({ searchParams }: PageProps) {
-  const filters = await searchParamsCache.parse(searchParams);
+  const filters = await locationsSearchParamsCache.parse(searchParams);
   const page =
     typeof filters.page === "string"
       ? parseInt(filters.page)
@@ -274,17 +276,50 @@ export default async function LocationsPage({ searchParams }: PageProps) {
     });
   }
 
-  if (filters.location) {
-    const locationLower = filters.location.toLowerCase();
+  // State filter
+  if (filters.state) {
+    const stateLower = filters.state.toLowerCase();
     filteredCityData = filteredCityData.filter((location: any) => {
-      const cityMatch = location.city?.toLowerCase().includes(locationLower);
-      const stateMatch = location.state?.toLowerCase().includes(locationLower);
-      const countryMatch = location.country
-        ?.toLowerCase()
-        .includes(locationLower);
-      return cityMatch || stateMatch || countryMatch;
+      const locState = normalizeState(location.state);
+      return (
+        locState === stateLower || location.state?.toLowerCase() === stateLower
+      );
     });
   }
+
+  // Country filter
+  if (filters.country) {
+    const countryLower = filters.country.toLowerCase();
+    filteredCityData = filteredCityData.filter((location: any) =>
+      location.country?.toLowerCase().includes(countryLower),
+    );
+  }
+
+  // Min salary filter
+  if (filters.minSalary > 0) {
+    filteredCityData = filteredCityData.filter(
+      (location: any) => (location.avgSalary || 0) >= filters.minSalary,
+    );
+  }
+
+  // Min jobs filter
+  if (filters.minJobs > 0) {
+    filteredCityData = filteredCityData.filter(
+      (location: any) => (location.jobCount || 0) >= filters.minJobs,
+    );
+  }
+
+  // Sort
+  if (filters.sort === "salary") {
+    filteredCityData = [...filteredCityData].sort(
+      (a, b) => (b.avgSalary || 0) - (a.avgSalary || 0),
+    );
+  } else if (filters.sort === "name") {
+    filteredCityData = [...filteredCityData].sort((a, b) =>
+      (a.city || "").localeCompare(b.city || ""),
+    );
+  }
+  // default 'jobs' sort is already applied by deduplication
 
   const totalJobs = filteredCityData.reduce(
     (sum: number, loc) => sum + (loc.jobCount || 0),
@@ -309,7 +344,12 @@ export default async function LocationsPage({ searchParams }: PageProps) {
     const params = new URLSearchParams();
     params.set("page", pageNum.toString());
     if (filters.q) params.set("q", filters.q);
-    if (filters.location) params.set("location", filters.location);
+    if (filters.state) params.set("state", filters.state);
+    if (filters.country) params.set("country", filters.country);
+    if (filters.minSalary > 0)
+      params.set("minSalary", filters.minSalary.toString());
+    if (filters.minJobs > 0) params.set("minJobs", filters.minJobs.toString());
+    if (filters.sort !== "jobs") params.set("sort", filters.sort);
     return `/locations?${params.toString()}`;
   };
 
@@ -425,7 +465,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
         />
       )}
 
-      <FilterBar />
+      <LocationsFilterBar />
 
       {/* Tabbed Content */}
       <LocationsTabs
@@ -454,8 +494,8 @@ export default async function LocationsPage({ searchParams }: PageProps) {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold">
-                  {filters.q || filters.location
-                    ? `Search Results${filters.q ? ` for "${filters.q}"` : ""}`
+                  {filters.q || filters.state || filters.country
+                    ? `Search Results${filters.q ? ` for "${filters.q}"` : ""}${filters.state ? ` in ${filters.state}` : ""}${filters.country ? ` (${filters.country})` : ""}`
                     : "Top Locations"}
                 </h2>
               </div>
