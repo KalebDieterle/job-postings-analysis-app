@@ -8,13 +8,21 @@ if (typeof window === "undefined") {
   config({ path: path.resolve(process.cwd(), ".env.local") });
 }
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL is not defined. Check your .env.local file."
-  );
-}
+// Validate URL only when accessing the DB, not on import
+// This prevents build-time crashes if the env var is missing during build
 
-const sql = neon(process.env.DATABASE_URL);
-const db = drizzle(sql);
+let _db: ReturnType<typeof drizzle> | null = null;
 
-export { db };
+export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+  get: (_target, prop) => {
+    // Lazy initialization
+    if (!_db) {
+       if (!process.env.DATABASE_URL) {
+          throw new Error("DATABASE_URL is not defined. Check your .env.local file or Vercel Environment Variables.");
+       }
+       const sql = neon(process.env.DATABASE_URL);
+       _db = drizzle(sql);
+    }
+    return (_db as any)[prop];
+  },
+});
