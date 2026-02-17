@@ -21,10 +21,43 @@ import {
 import type { AdzunaJob } from '@/lib/adzuna/types';
 
 // Configuration from environment variables
-const ADZUNA_ROLES = (process.env.ADZUNA_ROLES || 'software engineer,data engineer,devops engineer,frontend developer,backend developer,full stack developer')
-  .split(',')
-  .map(r => r.trim())
-  .filter(Boolean);
+const ADZUNA_ROLES = (process.env.ADZUNA_ROLES || [
+  // Tech - Software Logic
+  'software engineer', 'senior software engineer', 'principal software engineer', 'engineering manager',
+  'frontend developer', 'backend developer', 'full stack developer', 'web developer', 'ui engineer',
+  'ios developer', 'android developer', 'mobile developer', 'game developer',
+  'embedded systems engineer', 'firmware engineer', 'blockchain developer',
+
+  // Tech - Data & Infrastructure
+  'data engineer', 'data scientist', 'machine learning engineer', 'ai engineer', 'data analyst',
+  'devops engineer', 'site reliability engineer', 'cloud engineer', 'cloud architect',
+  'systems administrator', 'network engineer', 'cybersecurity analyst', 'security engineer',
+  'database administrator',
+
+  // Tech - Product & Design
+  'product manager', 'product owner', 'technical program manager', 'scrum master',
+  'ux designer', 'product designer', 'graphic designer', 'technical writer',
+
+  // Business & Finance
+  'accountant', 'financial analyst', 'bookkeeper', 'auditor', 'controller',
+  'business analyst', 'management consultant', 'project manager',
+  'marketing manager', 'digital marketing specialist', 'seo specialist', 'content manager',
+  'sales representative', 'account executive', 'sales manager', 'customer success manager',
+
+  // Healthcare
+  'registered nurse', 'medical assistant', 'pharmacy technician', 'nurse practitioner',
+  'physical therapist', 'occupational therapist', 'healthcare administrator',
+
+  // Trades & Construction
+  'electrician', 'plumber', 'hvac technician', 'carpenter', 'construction manager',
+  'welder', 'machinist', 'maintenance technician',
+
+  // Other Professional
+  'human resources manager', 'recruiter', 'talent acquisition specialist',
+  'administrative assistant', 'office manager', 'executive assistant',
+  'legal assistant', 'paralegal', 'attorney',
+  'warehouse associate', 'driver', 'customer service representative'
+].join(',')).split(',').map(r => r.trim()).filter(Boolean);
 
 const ADZUNA_LOCATIONS = (process.env.ADZUNA_LOCATIONS || 'us')
   .split(',')
@@ -116,8 +149,38 @@ async function importFromAdzuna() {
     process.exit(1);
   }
 
-  console.log('✅ Within API limits, proceeding with import...\n');
-  console.log('='.repeat(80) + '\n');
+  // --- Dynamic Quota Calculation ---
+  const startDailyUsage = usageStats.daily;
+  const remainingDaily = Math.max(0, ADZUNA_DAILY_LIMIT - startDailyUsage);
+  // User requested 75% of remaining limit to be used in this session
+  const sessionBudget = Math.floor(remainingDaily * 0.75);
+  // Divide evenly among roles (minimum 1 request if budget allows)
+  const quotaPerRole = Math.max(1, Math.floor(sessionBudget / Math.max(1, ADZUNA_ROLES.length)));
+
+  console.log('⚖️  Dynamic Quota Allocation:');
+  console.log(`   Roles to process: ${ADZUNA_ROLES.length}`);
+  console.log(`   Starting Daily Usage: ${startDailyUsage}`);
+  console.log(`   Remaining Daily Limit: ${remainingDaily}`);
+  console.log(`   Session Budget (75%): ${sessionBudget} requests`);
+  console.log(`   Quota per Role: ${quotaPerRole} requests`);
+  console.log(`   Est. Total Requests: ${Math.min(sessionBudget, ADZUNA_ROLES.length * quotaPerRole)}`);
+  
+  if (sessionBudget < 1) {
+    console.log('\n⚠️  Session budget is overly constrained. Skipping import to preserve limits.');
+    process.exit(0);
+  }
+
+  console.log('\n✅ Within API limits, proceeding with import...\n');
+  console.log('\n📋 Configuration:');
+  // console.log(`   Roles: ${ADZUNA_ROLES.join(', ')}`); // Too long to print now
+  console.log(`   Roles Count: ${ADZUNA_ROLES.length}`);
+  console.log(`   Locations: ${ADZUNA_LOCATIONS.join(', ')}`);
+  console.log(`   Results per page: ${ADZUNA_RESULTS_PER_PAGE}`);
+  console.log(`   Max total results: ${ADZUNA_MAX_RESULTS}`);
+  console.log(`   Rate limit delay: ${ADZUNA_RATE_LIMIT_MS}ms`);
+  console.log(`   Daily API limit: ${ADZUNA_DAILY_LIMIT} requests`);
+  console.log(`   Look back: ${ADZUNA_DAYS_BACK} days`);
+  console.log('\n' + '='.repeat(80) + '\n');
 
   // Initialize rate limiter
   const rateLimiter = new AdzunaRateLimiter(ADZUNA_DAILY_LIMIT, ADZUNA_RATE_LIMIT_MS);
@@ -130,6 +193,7 @@ async function importFromAdzuna() {
   let totalCompaniesProcessed = 0;
   let totalSkillsInserted = 0;
   let totalIndustriesMapped = 0;
+  let totalRequestsThisRun = 0;
   const uniqueCompanies = new Set<string>();
 
   try {
@@ -140,9 +204,11 @@ async function importFromAdzuna() {
       let page = 1;
       let hasMoreResults = true;
       let roleJobsFetched = 0;
+      let roleRequests = 0;
 
-      while (hasMoreResults && roleJobsFetched < ADZUNA_MAX_RESULTS) {
-        // Check if we've hit the daily limit
+      // Stop if role has fetched max results OR if role has used its allocated request quota
+      while (hasMoreResults && roleJobsFetched < ADZUNA_MAX_RESULTS && roleRequests < quotaPerRole) {
+        // Check if we've hit the daily limit (global safety check)
         if (rateLimiter.getRequestCount() >= ADZUNA_DAILY_LIMIT) {
           console.log(`\n⚠️  Reached daily API limit (${ADZUNA_DAILY_LIMIT} requests)`);
           hasMoreResults = false;
@@ -152,7 +218,7 @@ async function importFromAdzuna() {
         // Wait for rate limiter
         await rateLimiter.waitForNextRequest();
 
-        console.log(`   📄 Fetching page ${page}...`);
+        console.log(`   📄 Fetching page ${page}... (Request ${roleRequests + 1}/${quotaPerRole} for this role)`);
 
         try {
           const response = await adzunaClient.search({
@@ -162,6 +228,9 @@ async function importFromAdzuna() {
             sort_by: 'date',
             max_days_old: ADZUNA_DAYS_BACK,
           });
+          
+          roleRequests++;
+          totalRequestsThisRun++;
 
           if (response.results.length === 0) {
             console.log(`   ℹ️  No more results for "${role}"`);
@@ -244,6 +313,9 @@ async function importFromAdzuna() {
           } else if (response.results.length < ADZUNA_RESULTS_PER_PAGE) {
             console.log(`   ℹ️  No more pages available for "${role}"`);
             hasMoreResults = false;
+          } else if (roleRequests >= quotaPerRole) {
+            console.log(`   ℹ️  Reached session quota (${quotaPerRole} requests) for "${role}"`);
+            hasMoreResults = false;
           } else {
             page++;
           }
@@ -263,7 +335,7 @@ async function importFromAdzuna() {
         }
       }
 
-      console.log(`\n   ✅ Completed "${role}": ${roleJobsFetched} jobs fetched\n`);
+      console.log(`\n   ✅ Completed "${role}": ${roleJobsFetched} jobs fetched (${roleRequests} requests)\n`);
     }
 
     console.log('='.repeat(80) + '\n');
@@ -275,6 +347,7 @@ async function importFromAdzuna() {
     console.log(`   Unique companies: ${uniqueCompanies.size}`);
     console.log(`   Skills associations: ${totalSkillsInserted}`);
     console.log(`   Industries mapped: ${totalIndustriesMapped}`);
+    console.log(`   Requests this run: ${totalRequestsThisRun}`);
     console.log('');
 
     // Update usage stats in database
@@ -285,14 +358,14 @@ async function importFromAdzuna() {
     console.log(`   Monthly: ${finalUsage.monthly}/2500`);
     console.log('');
 
-    const remainingDaily = 250 - finalUsage.daily;
-    const remainingWeekly = 1000 - finalUsage.weekly;
-    const remainingMonthly = 2500 - finalUsage.monthly;
+    const remainingDailyEnd = 250 - finalUsage.daily;
+    const remainingWeeklyEnd = 1000 - finalUsage.weekly;
+    const remainingMonthlyEnd = 2500 - finalUsage.monthly;
 
     console.log('📈 Remaining API Capacity:');
-    console.log(`   Today: ${remainingDaily} requests`);
-    console.log(`   This week: ${remainingWeekly} requests`);
-    console.log(`   This month: ${remainingMonthly} requests`);
+    console.log(`   Today: ${remainingDailyEnd} requests`);
+    console.log(`   This week: ${remainingWeeklyEnd} requests`);
+    console.log(`   This month: ${remainingMonthlyEnd} requests`);
     console.log('');
 
     console.log('='.repeat(80) + '\n');
