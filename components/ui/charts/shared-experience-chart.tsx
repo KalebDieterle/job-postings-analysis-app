@@ -52,11 +52,9 @@ export function SharedExperienceChart({
         <Pie
           data={formattedData}
           cx="50%"
-          cy="50%"
-          labelLine={false}
-          label={(entry: any) => `${entry.name}: ${entry.percentage}%`}
-          outerRadius={110}
-          innerRadius={showInnerRadius ? 45 : 0}
+          cy="45%"
+          outerRadius={100}
+          innerRadius={showInnerRadius ? 48 : 0}
           fill="#8884d8"
           dataKey="value"
         >
@@ -91,10 +89,10 @@ export function SharedExperienceChart({
         />
         <Legend
           verticalAlign="bottom"
-          height={40}
+          height={80}
           formatter={(value, entry: any) => (
             <span className="text-sm">
-              {value} ({entry.payload.value.toLocaleString()})
+              {value} — {entry.payload.percentage}% ({entry.payload.value.toLocaleString()})
             </span>
           )}
         />
