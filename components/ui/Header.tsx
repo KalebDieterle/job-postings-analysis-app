@@ -1,15 +1,10 @@
-import { ModeToggle } from "@/components/ui/mode-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import React from "react";
 
 const Header = () => {
   return (
-    <header className="relative border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="absolute top-4 right-6">
-        <ModeToggle />
-      </div>
-
+    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 py-14 text-center space-y-4">
         <div className="flex justify-center">
           <Badge

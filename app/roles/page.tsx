@@ -11,44 +11,32 @@ import {
   getSkillsFrequency,
   getPostingTimeline,
   getExperienceDistribution,
+  getSalaryInsights,
+  getRolesSalaryBenchmark,
 } from "@/db/queries";
 import RoleCard from "@/components/ui/role-card";
 import { PaginationControls } from "@/components/ui/skills/pagination-controls";
 import { StatsGrid } from "@/components/ui/roles/stats-grid";
 import { RoleDistributionChart } from "@/components/ui/roles/role-distribution-chart";
+import { SalaryByRoleChart } from "@/components/ui/roles/salary-by-role-chart";
+import { MarketInsightsBar } from "@/components/ui/roles/market-insights-bar";
 import { SkillsFrequencyChart } from "@/components/ui/roles/skills-frequency-chart";
 import { PostingTimelineChart } from "@/components/ui/roles/posting-timeline-chart";
 import { ExperienceBreakdownChart } from "@/components/ui/roles/experience-breakdown-chart";
 import { slugify } from "@/lib/slugify";
 import { searchParamsCache } from "@/lib/search-params";
 import { FilterBar } from "@/components/ui/filters/filter-bar";
-import { Skeleton } from "@/components/ui/skeleton";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function RolesPage({ searchParams }: PageProps) {
-  console.log("🚀 [RolesPage] Starting page render");
-  const pageStart = Date.now();
-
   try {
-    // 1. Parse the URL params
-    console.log("📝 [RolesPage] Parsing search params...");
     const filters = await searchParamsCache.parse(searchParams);
-    console.log("✅ [RolesPage] Filters:", filters);
 
-    // 2. Fetch roles
-    console.log("📊 [RolesPage] Fetching top job roles...");
-    const rolesStart = Date.now();
     const roles = await getTopJobRoles(20, filters, Number(filters.page ?? 1));
-    console.log(
-      `✅ [RolesPage] Got ${roles.length} roles in ${Date.now() - rolesStart}ms`,
-    );
 
-    // 2b. Fetch analytics data in parallel
-    console.log("📈 [RolesPage] Fetching analytics...");
-    const analyticsStart = Date.now();
     const [
       avgSalary,
       topLocation,
@@ -57,6 +45,8 @@ export default async function RolesPage({ searchParams }: PageProps) {
       skillsFrequency,
       postingTimeline,
       experienceDistribution,
+      salaryInsights,
+      salaryBenchmark,
     ] = await Promise.all([
       getAverageSalary(filters),
       getTopLocation(filters),
@@ -65,45 +55,37 @@ export default async function RolesPage({ searchParams }: PageProps) {
       getSkillsFrequency(20, filters),
       getPostingTimeline(90, filters),
       getExperienceDistribution(filters),
+      getSalaryInsights(),
+      getRolesSalaryBenchmark(8),
     ]);
-    console.log(
-      `✅ [RolesPage] Got analytics in ${Date.now() - analyticsStart}ms`,
-    );
 
-    // 3. Fetch time series
-    console.log("📈 [RolesPage] Fetching timeseries...");
-    const tsStart = Date.now();
     const tsRows = await getTopRolesTimeSeries(roles.length || 20);
-    console.log(
-      `✅ [RolesPage] Got ${tsRows.length} timeseries rows in ${Date.now() - tsStart}ms`,
-    );
 
-    // 4. Build map
-    console.log("🗺️ [RolesPage] Building timeseries map...");
     const timeseriesMap = new Map<string, { day: string; count: number }[]>();
     for (const row of tsRows) {
       const list = timeseriesMap.get(row.title) ?? [];
       list.push({ day: row.day, count: row.count });
       timeseriesMap.set(row.title, list);
     }
-    console.log(`✅ [RolesPage] Map has ${timeseriesMap.size} entries`);
 
-    console.log(`🎉 [RolesPage] Total page time: ${Date.now() - pageStart}ms`);
+    // Salary lookup map for role cards
+    const salaryMap = new Map(salaryBenchmark.map((r) => [r.title, r.avg_salary]));
+
+    const totalRoles = roleDistribution.reduce((sum, r) => sum + r.count, 0);
 
     return (
       <div className="space-y-6">
         {/* Header */}
         <div className="pb-2">
-          <h1 className="text-3xl font-bold mb-4">Explore Roles</h1>
+          <h1 className="text-3xl font-bold mb-1">Explore Roles</h1>
+          <p className="text-muted-foreground text-sm">
+            {totalRoles.toLocaleString()} postings across all roles
+          </p>
         </div>
 
         {/* Stats Grid */}
         <StatsGrid
-          totalRoles={
-            roles.length > 0
-              ? roleDistribution.reduce((sum, r) => sum + r.count, 0)
-              : 0
-          }
+          totalRoles={totalRoles}
           avgSalary={avgSalary}
           topLocation={{
             location: topLocation?.location ?? "N/A",
@@ -112,8 +94,22 @@ export default async function RolesPage({ searchParams }: PageProps) {
           remotePercentage={remotePercentage}
         />
 
-        {/* Role Distribution Chart */}
-        <RoleDistributionChart data={roleDistribution} />
+        {/* Market Pulse — synthesized insights */}
+        <MarketInsightsBar
+          highestPayingRole={salaryInsights.highestRole}
+          highestSalary={salaryInsights.highestSalary}
+          mostInDemandRole={roleDistribution[0]?.title ?? "N/A"}
+          mostInDemandCount={roleDistribution[0]?.count ?? 0}
+          medianSalary={salaryInsights.medianSalary}
+          minSalary={salaryInsights.minSalary}
+          maxSalary={salaryInsights.maxSalary}
+        />
+
+        {/* Salary Benchmark + Role Distribution side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SalaryByRoleChart data={salaryBenchmark} />
+          <RoleDistributionChart data={roleDistribution} />
+        </div>
 
         {/* Filter Bar */}
         <FilterBar />
@@ -128,6 +124,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
                 title={r.title}
                 count={Number(r.count)}
                 timeseries={timeseriesMap.get(r.title) ?? []}
+                avgSalary={salaryMap.get(r.title)}
                 href={
                   slugify(r.title) ? `/roles/${slugify(r.title)}` : undefined
                 }
@@ -135,7 +132,6 @@ export default async function RolesPage({ searchParams }: PageProps) {
             ))}
           </div>
         ) : (
-          /* Empty State if filters return nothing */
           <div className="py-20 text-center border-2 border-dashed rounded-xl bg-muted/10">
             <p className="text-muted-foreground">
               No roles found matching your filters.
@@ -167,17 +163,18 @@ export default async function RolesPage({ searchParams }: PageProps) {
           />
         </div>
 
-        {/* Advanced Analytics Section */}
-        <div className="mt-8 space-y-6">
-          <h2 className="text-2xl font-bold">Detailed Analytics</h2>
-
-          {/* Two column layout for charts */}
+        {/* Deep Analytics — filter-aware */}
+        <div className="mt-4 space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold">Detailed Analytics</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Reflects your current filters
+            </p>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PostingTimelineChart data={postingTimeline} />
             <ExperienceBreakdownChart data={experienceDistribution} />
           </div>
-
-          {/* Skills frequency full width */}
           <SkillsFrequencyChart data={skillsFrequency} />
         </div>
       </div>

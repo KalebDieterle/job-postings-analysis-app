@@ -1,14 +1,13 @@
 import { AdzunaSearchParams, AdzunaSearchResponse } from './types';
 
 const ADZUNA_BASE_URL = 'https://api.adzuna.com/v1/api';
-const ADZUNA_COUNTRY = 'us';
 
 class AdzunaClient {
   private appId: string;
   private appKey: string;
   private baseUrl: string;
 
-  constructor() {
+  constructor(country: string = 'us') {
     // Load .env.local for local script usage
     if (typeof window === 'undefined' && !process.env.ADZUNA_APP_ID) {
       require('dotenv').config({ path: '.env.local' });
@@ -16,7 +15,7 @@ class AdzunaClient {
 
     this.appId = process.env.ADZUNA_APP_ID || '';
     this.appKey = process.env.ADZUNA_APP_KEY || '';
-    this.baseUrl = `${ADZUNA_BASE_URL}/jobs/${ADZUNA_COUNTRY}`;
+    this.baseUrl = `${ADZUNA_BASE_URL}/jobs/${country}`;
 
     if (!this.appId || !this.appKey) {
       throw new Error(
@@ -79,7 +78,8 @@ class AdzunaClient {
  * on Vercel where ADZUNA_APP_ID isn't set.
  */
 let _client: AdzunaClient | null = null;
-export function getAdzunaClient(): AdzunaClient {
+export function getAdzunaClient(country = 'us'): AdzunaClient {
+  if (country !== 'us') return new AdzunaClient(country);
   if (!_client) _client = new AdzunaClient();
   return _client;
 }

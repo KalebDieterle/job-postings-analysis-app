@@ -23,6 +23,7 @@ interface RoleCardProps {
   href?: string;
   count: number;
   timeseries?: TimePoint[];
+  avgSalary?: number;
   className?: string;
 }
 
@@ -115,6 +116,7 @@ const RoleCard: React.FC<RoleCardProps> = ({
   href,
   count,
   timeseries = [],
+  avgSalary,
   className,
 }) => {
   const ordered = [...timeseries].sort(
@@ -171,7 +173,13 @@ const RoleCard: React.FC<RoleCardProps> = ({
       <CardFooter className="pt-2">
         <div className="flex items-center justify-between w-full">
           <div className="text-xs text-muted-foreground">View details</div>
-          <div className="text-xs text-muted-foreground">•</div>
+          {avgSalary && avgSalary > 0 ? (
+            <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              ${Math.round(avgSalary / 1000)}k avg
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">•</div>
+          )}
         </div>
       </CardFooter>
     </Card>

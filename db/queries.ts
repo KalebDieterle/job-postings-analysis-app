@@ -185,7 +185,7 @@ export async function getTopRolesTimeSeries(limit = 10) {
         COUNT(*)::int as count
       FROM ${postings} p
       LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
-      WHERE COALESCE(ra.canonical_name, p.title) = ANY(${topRoles})
+      WHERE COALESCE(ra.canonical_name, p.title) = ANY(ARRAY[${sql.join(topRoles.map(r => sql`${r}`), sql`, `)}]::text[])
       GROUP BY COALESCE(ra.canonical_name, p.title), DATE_TRUNC('day', p.listed_time::timestamp)
       ORDER BY day ASC
     `);
@@ -1342,9 +1342,9 @@ export async function getRemotePercentage(
   }
 
   const query = db.execute<{ total: number; remote: number }>(sql`
-    SELECT 
+    SELECT
       COUNT(*)::int as total,
-      COUNT(*) FILTER (WHERE LOWER(location) LIKE '%remote%')::int as remote
+      COUNT(*) FILTER (WHERE p.remote_allowed = '1.0')::int as remote
     FROM ${postings} p
     LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
     ${conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``}
@@ -2346,6 +2346,56 @@ export async function getCompanyComparisonData(companyIds: string[]) {
     .groupBy(companies.company_id, companies.name, companies.city, companies.state, companies.country, companies.company_size);
   
   console.log('📊 Comparison Results:', results);
-  
+
   return results;
+}
+
+// ===========================
+// Salary benchmark by role
+// ===========================
+export async function getRolesSalaryBenchmark(limit = 15) {
+  const result = await db.execute<{
+    title: string;
+    avg_salary: number;
+    posting_count: number;
+    salary_coverage: number;
+  }>(sql`
+    WITH role_totals AS (
+      SELECT
+        COALESCE(ra.canonical_name, p.title) AS title,
+        COUNT(*)::int AS total_count
+      FROM ${postings} p
+      LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
+      GROUP BY COALESCE(ra.canonical_name, p.title)
+    ),
+    role_salary AS (
+      SELECT
+        COALESCE(ra.canonical_name, p.title) AS title,
+        ROUND(AVG(p.yearly_min_salary))::int AS avg_salary,
+        COUNT(*)::int AS salary_count
+      FROM ${postings} p
+      LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
+      WHERE p.yearly_min_salary IS NOT NULL
+        AND p.yearly_min_salary > 10000
+        AND p.yearly_min_salary < 1000000
+      GROUP BY COALESCE(ra.canonical_name, p.title)
+      HAVING COUNT(*) >= 10
+    )
+    SELECT
+      rs.title,
+      rs.avg_salary,
+      rt.total_count AS posting_count,
+      ROUND(rs.salary_count::numeric / rt.total_count * 100)::int AS salary_coverage
+    FROM role_salary rs
+    JOIN role_totals rt ON rs.title = rt.title
+    ORDER BY rs.avg_salary DESC
+    LIMIT ${limit}
+  `);
+
+  return result.rows.map(row => ({
+    title: row.title,
+    avg_salary: Number(row.avg_salary),
+    posting_count: Number(row.posting_count),
+    salary_coverage: Number(row.salary_coverage),
+  }));
 }

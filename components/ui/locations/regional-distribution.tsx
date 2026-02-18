@@ -6,7 +6,6 @@ import {
   Pie,
   Cell,
   ResponsiveContainer,
-  Legend,
   Tooltip,
   TooltipProps,
 } from "recharts";
@@ -29,7 +28,6 @@ const CHART_COLORS = [
   "#10b981", // green
 ];
 
-// Custom Tooltip Component
 interface CustomTooltipProps extends TooltipProps<number, string> {
   active?: boolean;
   payload?: Array<{
@@ -71,35 +69,6 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
-const CustomLabel = ({
-  cx,
-  cy,
-  midAngle,
-  innerRadius,
-  outerRadius,
-  percent,
-}: any) => {
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos((-midAngle * Math.PI) / 180);
-  const y = cy + radius * Math.sin((-midAngle * Math.PI) / 180);
-
-  // Only show label if percentage is significant
-  if (percent < 0.05) return null;
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="white"
-      textAnchor={x > cx ? "start" : "end"}
-      dominantBaseline="central"
-      className="font-bold text-sm"
-    >
-      {`${(percent * 100).toFixed(0)}%`}
-    </text>
-  );
-};
-
 export function RegionalDistribution({ data }: RegionalDistributionProps) {
   const chartData = data.map((item, index) => ({
     ...item,
@@ -121,18 +90,16 @@ export function RegionalDistribution({ data }: RegionalDistributionProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
+      <CardContent className="space-y-4">
+        <ResponsiveContainer width="100%" height={200}>
           <PieChart>
             <Pie
               data={chartData}
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={CustomLabel}
-              innerRadius={60}
-              outerRadius={100}
-              fill="#8884d8"
+              innerRadius={55}
+              outerRadius={90}
               dataKey="value"
               animationBegin={0}
               animationDuration={800}
@@ -142,13 +109,35 @@ export function RegionalDistribution({ data }: RegionalDistributionProps) {
               ))}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
-            <Legend
-              verticalAlign="bottom"
-              height={60}
-              formatter={(value) => <span className="text-sm">{value}</span>}
-            />
           </PieChart>
         </ResponsiveContainer>
+
+        {/* Custom legend list */}
+        <div className="space-y-2">
+          {chartData.map((entry) => (
+            <div key={entry.name} className="flex items-center gap-2">
+              <span
+                className="shrink-0 w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: entry.fill }}
+              />
+              <span className="flex-1 text-sm truncate text-foreground">
+                {entry.name}
+              </span>
+              <span className="text-sm text-muted-foreground tabular-nums">
+                {entry.value.toLocaleString()}
+              </span>
+              <span
+                className="text-xs font-medium tabular-nums px-1.5 py-0.5 rounded"
+                style={{
+                  backgroundColor: `${entry.fill}20`,
+                  color: entry.fill,
+                }}
+              >
+                {entry.percentage.toFixed(1)}%
+              </span>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

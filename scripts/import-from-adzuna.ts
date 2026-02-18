@@ -3,7 +3,7 @@
 import 'dotenv/config';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { adzunaClient } from '@/lib/adzuna';
+import { getAdzunaClient } from '@/lib/adzuna';
 import {
   AdzunaRateLimiter,
   transformAdzunaJob,
@@ -63,6 +63,11 @@ const ADZUNA_LOCATIONS = (process.env.ADZUNA_LOCATIONS || 'us')
   .split(',')
   .map(l => l.trim())
   .filter(Boolean);
+
+const LOCATION_TO_ISO: Record<string, string> = {
+  us: 'US', gb: 'GB', au: 'AU', ca: 'CA', nz: 'NZ',
+  de: 'DE', fr: 'FR', nl: 'NL', sg: 'SG', in: 'IN',
+};
 
 const ADZUNA_RESULTS_PER_PAGE = parseInt(process.env.ADZUNA_RESULTS_PER_PAGE || '50', 10);
 const ADZUNA_MAX_RESULTS = parseInt(process.env.ADZUNA_MAX_RESULTS || '500', 10);
@@ -154,11 +159,13 @@ async function importFromAdzuna() {
   const remainingDaily = Math.max(0, ADZUNA_DAILY_LIMIT - startDailyUsage);
   // User requested 75% of remaining limit to be used in this session
   const sessionBudget = Math.floor(remainingDaily * 0.75);
-  // Divide evenly among roles (minimum 1 request if budget allows)
-  const quotaPerRole = Math.max(1, Math.floor(sessionBudget / Math.max(1, ADZUNA_ROLES.length)));
+  // Divide evenly among roles × locations (minimum 1 request if budget allows)
+  const totalCombinations = Math.max(1, ADZUNA_ROLES.length * ADZUNA_LOCATIONS.length);
+  const quotaPerRole = Math.max(1, Math.floor(sessionBudget / totalCombinations));
 
   console.log('⚖️  Dynamic Quota Allocation:');
   console.log(`   Roles to process: ${ADZUNA_ROLES.length}`);
+  console.log(`   Locations to process: ${ADZUNA_LOCATIONS.length}`);
   console.log(`   Starting Daily Usage: ${startDailyUsage}`);
   console.log(`   Remaining Daily Limit: ${remainingDaily}`);
   console.log(`   Session Budget (75%): ${sessionBudget} requests`);
@@ -197,9 +204,14 @@ async function importFromAdzuna() {
   const uniqueCompanies = new Set<string>();
 
   try {
-    // Iterate through each role
+    // Iterate through each location, then each role
+    for (const locationCode of ADZUNA_LOCATIONS) {
+      const isoCode = LOCATION_TO_ISO[locationCode] ?? locationCode.toUpperCase();
+      const locationClient = getAdzunaClient(locationCode);
+      console.log(`\n🌍 Processing location: ${locationCode.toUpperCase()} (ISO: ${isoCode})\n`);
+
     for (const role of ADZUNA_ROLES) {
-      console.log(`\n🔍 Searching for: "${role}"\n`);
+      console.log(`\n🔍 Searching for: "${role}" in ${locationCode.toUpperCase()}\n`);
 
       let page = 1;
       let hasMoreResults = true;
@@ -221,7 +233,7 @@ async function importFromAdzuna() {
         console.log(`   📄 Fetching page ${page}... (Request ${roleRequests + 1}/${quotaPerRole} for this role)`);
 
         try {
-          const response = await adzunaClient.search({
+          const response = await locationClient.search({
             what: role,
             results_per_page: ADZUNA_RESULTS_PER_PAGE,
             page: page,
@@ -276,7 +288,7 @@ async function importFromAdzuna() {
           }
 
           // Transform and insert jobs (pass country for deduplication)
-          const transformedJobs = validJobs.map(job => transformAdzunaJob(job, 'US'));
+          const transformedJobs = validJobs.map(job => transformAdzunaJob(job, isoCode));
           const insertResult = await batchInsertJobs(transformedJobs);
 
           totalJobsInserted += insertResult.inserted;
@@ -335,8 +347,11 @@ async function importFromAdzuna() {
         }
       }
 
-      console.log(`\n   ✅ Completed "${role}": ${roleJobsFetched} jobs fetched (${roleRequests} requests)\n`);
-    }
+      console.log(`\n   ✅ Completed "${role}" [${locationCode.toUpperCase()}]: ${roleJobsFetched} jobs fetched (${roleRequests} requests)\n`);
+    } // end roles loop
+
+    console.log(`\n✅ Completed location: ${locationCode.toUpperCase()}\n`);
+    } // end locations loop
 
     console.log('='.repeat(80) + '\n');
     console.log('📊 IMPORT SUMMARY:\n');
