@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__neon__list_projects",
+      "mcp__neon__run_sql"
+    ]
+  }
+}

@@ -44,10 +44,9 @@ export default async function Home() {
   // Format trending skills for the enhanced chart
   const trendingSkills = trendingSkillsRaw.map((s: any) => ({
     skill_name: s.name ?? s.skill_name ?? "",
-    current_count: s.currentCount ?? s.count ?? 0,
-    previous_count:
-      s.previousCount ?? Math.floor((s.currentCount ?? s.count ?? 0) * 0.7), // fallback estimate
-    growth_rate: s.growthRate ?? 0,
+    current_count: s.current_count ?? s.currentCount ?? 0,
+    previous_count: s.previous_count ?? s.previousCount ?? 0,
+    growth_rate: Number(s.growth_percentage ?? s.growthRate ?? 0),
   }));
 
   return (
