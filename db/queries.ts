@@ -1752,12 +1752,15 @@ export async function getSkillsWithFilters(params: {
   if (search) {
     conditions.push(ilike(skills.skill_name, `%${search}%`));
   }
+  if (category.length > 0) {
+    conditions.push(inArray(skills.skill_name, category));
+  }
 
   // Build the base query
   let query = db
     .select({
       name: skills.skill_name,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(${job_skills.job_id})::int`,
       avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0)::float`,
     })
     .from(skills)
@@ -1773,8 +1776,8 @@ export async function getSkillsWithFilters(params: {
   // Apply HAVING clauses for demand and salary filters
   query = query.having(
     and(
-      sql`count(*) >= ${demandMin}`,
-      sql`count(*) <= ${demandMax}`,
+      sql`count(${job_skills.job_id}) >= ${demandMin}`,
+      sql`count(${job_skills.job_id}) <= ${demandMax}`,
       sql`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0) >= ${salaryMin}`,
       sql`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0) <= ${salaryMax}`
     )
@@ -1790,7 +1793,7 @@ export async function getSkillsWithFilters(params: {
       break;
     case "demand":
     default:
-      query = query.orderBy(desc(sql`count(*)`)) as any;
+      query = query.orderBy(desc(sql`count(${job_skills.job_id})`)) as any;
       break;
   }
 
@@ -2009,102 +2012,30 @@ export async function getSkillTimeline(params: {
 }
 
 export async function getCategoryDistribution() {
-  // This would ideally use a category column in the skills table
-  // For now, we'll return the top skills grouped by demand tiers
-  const allSkills = await db
+  const categories = await db
     .select({
-      name: skills.skill_name,
-      count: sql<number>`count(*)::int`,
+      category: skills.skill_name,
+      count: sql<number>`count(${job_skills.job_id})::int`,
     })
     .from(skills)
     .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
+    .where(isNotNull(job_skills.job_id))
     .groupBy(skills.skill_name)
-    .orderBy(desc(sql`count(*)`))
-    .limit(100);
+    .orderBy(desc(sql`count(${job_skills.job_id})`));
 
-  // Simple categorization based on skill name patterns
-  const categories = {
-    'Programming Languages': 0,
-    'Frameworks & Libraries': 0,
-    'Databases & Data': 0,
-    'DevOps & Cloud': 0,
-    'Tools & Platforms': 0,
-    'AI/ML & Data Science': 0,
-  };
+  const totalDemand = categories.reduce((sum, row) => sum + Number(row.count), 0);
 
-  allSkills.forEach((skill) => {
-    const name = skill.name.toLowerCase();
-    if (
-      name.includes('python') ||
-      name.includes('java') ||
-      name.includes('javascript') ||
-      name.includes('typescript') ||
-      name.includes('c++') ||
-      name.includes('c#') ||
-      name.includes('go') ||
-      name.includes('rust') ||
-      name.includes('ruby') ||
-      name.includes('php')
-    ) {
-      categories['Programming Languages']++;
-    } else if (
-      name.includes('react') ||
-      name.includes('angular') ||
-      name.includes('vue') ||
-      name.includes('node') ||
-      name.includes('django') ||
-      name.includes('flask') ||
-      name.includes('spring') ||
-      name.includes('.net')
-    ) {
-      categories['Frameworks & Libraries']++;
-    } else if (
-      name.includes('sql') ||
-      name.includes('postgres') ||
-      name.includes('mysql') ||
-      name.includes('mongo') ||
-      name.includes('redis') ||
-      name.includes('elasticsearch') ||
-      name.includes('database')
-    ) {
-      categories['Databases & Data']++;
-    } else if (
-      name.includes('docker') ||
-      name.includes('kubernetes') ||
-      name.includes('aws') ||
-      name.includes('azure') ||
-      name.includes('gcp') ||
-      name.includes('terraform') ||
-      name.includes('jenkins') ||
-      name.includes('ci/cd') ||
-      name.includes('devops')
-    ) {
-      categories['DevOps & Cloud']++;
-    } else if (
-      name.includes('git') ||
-      name.includes('jira') ||
-      name.includes('figma') ||
-      name.includes('tableau') ||
-      name.includes('power bi')
-    ) {
-      categories['Tools & Platforms']++;
-    } else if (
-      name.includes('machine learning') ||
-      name.includes('ai') ||
-      name.includes('tensorflow') ||
-      name.includes('pytorch') ||
-      name.includes('data science') ||
-      name.includes('pandas') ||
-      name.includes('numpy')
-    ) {
-      categories['AI/ML & Data Science']++;
-    }
-  });
-
-  return Object.entries(categories).map(([category, count]) => ({
-    category,
-    count,
-  }));
+  return categories
+    .filter((row) => Number(row.count) > 0)
+    .map((row) => {
+      const count = Number(row.count);
+      return {
+        category: row.category,
+        count,
+        percentage:
+          totalDemand > 0 ? Number(((count / totalDemand) * 100).toFixed(1)) : 0,
+      };
+    });
 }
 
 export async function getSkillsAdvancedStats() {

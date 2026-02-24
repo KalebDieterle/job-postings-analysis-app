@@ -76,3 +76,6 @@ next-env.d.ts
 # Runtime tracking & report files
 *-report.json
 !.adzuna-usage.json
+
+# Local Codex config
+config.toml

@@ -117,13 +117,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
 
       {/* Category Breakdown Chart */}
       {categoryData.length > 0 && (
-        <CategoryBreakdownChart
-          data={categoryData.map((item) => ({
-            category: item.category,
-            count: item.count,
-            percentage: 0, // Will be calculated in component
-          }))}
-        />
+        <CategoryBreakdownChart data={categoryData} />
       )}
 
       {/* Section Header */}
