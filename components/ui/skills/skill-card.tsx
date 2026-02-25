@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 interface SkillCardProps {
   name: string;
   count: number;
-  avgSalary: number;
+  medianSalary: number;
   category?: string;
   description?: string;
   trend?: number;
@@ -19,7 +19,7 @@ interface SkillCardProps {
 export function SkillCard({
   name,
   count,
-  avgSalary,
+  medianSalary,
   category = "Technology",
   description,
   trend,
@@ -29,7 +29,7 @@ export function SkillCard({
 
   const demandPercent = Math.min((count / 5000) * 100, 100);
   const formattedSalary =
-    avgSalary > 0 ? `$${Math.round(avgSalary / 1000)}k` : "N/A";
+    medianSalary > 0 ? `$${Math.round(medianSalary / 1000)}k` : "N/A";
 
   // Determine color based on category or default
   const colorSchemes: Record<
@@ -144,7 +144,7 @@ export function SkillCard({
           <div className="flex justify-between items-center pt-1">
             <span className="text-xs text-slate-400 uppercase font-bold tracking-tight flex items-center gap-1">
               <DollarSign className="h-3 w-3" />
-              Avg Salary
+              Median Salary
             </span>
             <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
               {formattedSalary}

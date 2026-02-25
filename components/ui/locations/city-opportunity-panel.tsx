@@ -113,7 +113,7 @@ export function CityOpportunityPanel({ data }: CityOpportunityPanelProps) {
             </p>
           </div>
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Top Salary</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Top Median Salary</p>
             <p className="font-semibold text-sm truncate">{formatLocation(topBySalary)}</p>
             <p className="text-lg font-bold text-emerald-400 mt-1 tabular-nums">
               {formatCompactSalary(topBySalary?.avgSalary)}

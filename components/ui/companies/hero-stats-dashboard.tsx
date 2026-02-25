@@ -133,7 +133,7 @@ export function HeroStatsDashboard({ stats }: HeroStatsDashboardProps) {
           <StatCard
             icon={<DollarSign className="w-6 h-6" />}
             value={stats.highestPayingSalary}
-            label="Highest Avg Salary"
+            label="Highest Median Salary"
             subtitle={stats.highestPayingCompany}
             gradientFrom="from-amber-500"
             gradientTo="to-amber-600"

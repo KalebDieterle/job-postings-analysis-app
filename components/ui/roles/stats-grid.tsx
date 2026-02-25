@@ -33,14 +33,14 @@ function StatCard({ title, value, icon, trend, gradient }: StatCardProps) {
 
 interface StatsGridProps {
   totalRoles: number;
-  avgSalary: number;
+  medianSalary: number;
   topLocation: { location: string; count: number };
   remotePercentage: number;
 }
 
 export function StatsGrid({
   totalRoles,
-  avgSalary,
+  medianSalary,
   topLocation,
   remotePercentage,
 }: StatsGridProps) {
@@ -53,10 +53,10 @@ export function StatsGrid({
         gradient="bg-gradient-to-br from-blue-500 to-blue-700"
       />
       <StatCard
-        title="Average Salary"
+        title="Median Salary"
         value={
-          avgSalary > 0
-            ? `$${Math.round(avgSalary).toLocaleString()}`
+          medianSalary > 0
+            ? `$${Math.round(medianSalary).toLocaleString()}`
             : "N/A"
         }
         icon={<DollarSign className="h-5 w-5 text-white" />}

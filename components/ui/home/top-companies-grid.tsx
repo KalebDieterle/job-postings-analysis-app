@@ -8,6 +8,7 @@ interface CompanyData {
   company_name: string;
   open_positions: number;
   top_skills: string[];
+  median_salary: number;
   avg_salary: number;
 }
 
@@ -50,7 +51,7 @@ function CompanyCard({ company }: { company: CompanyData }) {
           <div className="flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-green-600" />
             <span className="font-semibold">
-              ${(company.avg_salary / 1000).toFixed(0)}k avg
+              ${((company.median_salary ?? company.avg_salary) / 1000).toFixed(0)}k median
             </span>
           </div>
           <Button asChild size="sm" variant="outline">

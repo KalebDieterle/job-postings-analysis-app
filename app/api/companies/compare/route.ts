@@ -28,12 +28,18 @@ export async function POST(request: NextRequest) {
       count: data.length,
       sample: data[0] ? {
         name: data[0].name,
-        avg_salary: data[0].avg_salary,
+        median_salary: data[0].median_salary ?? data[0].avg_salary,
         posting_count: data[0].posting_count
       } : 'no data'
     });
-    
-    return NextResponse.json(data);
+
+    const payload = data.map((row: any) => ({
+      ...row,
+      median_salary: Number(row.median_salary ?? row.avg_salary ?? 0),
+      avg_salary: Number(row.median_salary ?? row.avg_salary ?? 0),
+    }));
+
+    return NextResponse.json(payload);
   } catch (error) {
     console.error("❌ API /companies/compare - Error:", error);
     return NextResponse.json(

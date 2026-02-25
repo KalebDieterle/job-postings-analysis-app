@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 interface SkillTableData {
   name: string;
   count: number;
-  avg_salary: number;
+  median_salary: number;
   growth?: number;
   topCompanies?: string[];
 }
@@ -70,8 +70,8 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
           bVal = b.count;
           break;
         case "salary":
-          aVal = a.avg_salary;
-          bVal = b.avg_salary;
+          aVal = a.median_salary;
+          bVal = b.median_salary;
           break;
         case "growth":
           aVal = a.growth || 0;
@@ -118,7 +118,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
       "Skill Name",
       "Category",
       "Demand",
-      "Avg Salary",
+      "Median Salary",
       "Growth",
       "Top Companies",
     ];
@@ -126,7 +126,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
       skill.name,
       categorizeSkill(skill.name),
       skill.count,
-      skill.avg_salary,
+      skill.median_salary,
       skill.growth || "N/A",
       skill.topCompanies?.join("; ") || "N/A",
     ]);
@@ -222,7 +222,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                     onClick={() => handleSort("salary")}
                     className="flex items-center font-semibold hover:text-slate-900 dark:hover:text-white"
                   >
-                    Avg Salary
+                    Median Salary
                     <SortIcon field="salary" />
                   </button>
                 </TableHead>
@@ -273,8 +273,8 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                   </TableCell>
                   <TableCell>{skill.count.toLocaleString()}</TableCell>
                   <TableCell>
-                    {skill.avg_salary > 0
-                      ? `$${(skill.avg_salary / 1000).toFixed(0)}k`
+                    {skill.median_salary > 0
+                      ? `$${(skill.median_salary / 1000).toFixed(0)}k`
                       : "N/A"}
                   </TableCell>
                   <TableCell>

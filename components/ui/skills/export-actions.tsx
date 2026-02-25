@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 interface SkillExportData {
   name: string;
   count: number;
-  avg_salary: number;
+  median_salary: number;
   category?: string;
   growth?: number;
 }
@@ -22,13 +22,13 @@ export function ExportActions({ data, filters }: ExportActionsProps) {
 
   const exportToCSV = () => {
     try {
-      const headers = ["Skill", "Category", "Demand", "Avg Salary", "Growth %"];
+      const headers = ["Skill", "Category", "Demand", "Median Salary", "Growth %"];
 
       const rows = data.map((skill) => [
         skill.name,
         skill.category || "N/A",
         skill.count,
-        skill.avg_salary,
+        skill.median_salary,
         skill.growth || "N/A",
       ]);
 

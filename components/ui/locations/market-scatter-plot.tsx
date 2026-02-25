@@ -62,7 +62,7 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
             </span>
           </p>
           <p className="text-sm text-muted-foreground">
-            Avg Salary:{" "}
+            Median Salary:{" "}
             <span className="font-semibold text-green-500">
               ${(data.avgSalary / 1000).toFixed(0)}k
             </span>
@@ -176,7 +176,7 @@ export function MarketScatterPlot({ data }: MarketScatterPlotProps) {
               tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
             >
               <Label
-                value="Average Salary"
+                value="Median Salary"
                 angle={-90}
                 position="left"
                 className="text-xs"

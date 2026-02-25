@@ -60,7 +60,7 @@ export default function LocationsList({
                   {location.avgSalary !== null && (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <DollarSign className="w-4 h-4" />
-                      <span>{formatSalary(location.avgSalary)} avg</span>
+                      <span>{formatSalary(location.avgSalary)} median</span>
                     </div>
                   )}
                 </div>

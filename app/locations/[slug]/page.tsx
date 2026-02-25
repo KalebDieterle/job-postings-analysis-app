@@ -219,9 +219,9 @@ export default async function LocationDetailPage({ params }: PageProps) {
       {/* Salary Distribution Chart */}
       <div className="mb-8">
         <SalaryDistributionChart
-          avgMinSalary={stats.avgMinSalary}
-          avgMedSalary={stats.avgMedSalary}
-          avgMaxSalary={stats.avgMaxSalary}
+          avgMinSalary={stats.medianMinSalary ?? stats.avgMinSalary}
+          avgMedSalary={stats.medianSalary ?? stats.avgMedSalary}
+          avgMaxSalary={stats.medianMaxSalary ?? stats.avgMaxSalary}
         />
       </div>
 

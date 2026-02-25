@@ -26,6 +26,7 @@ interface CompanyData {
   location: string;
   company_size: string | null;
   posting_count: number;
+  median_salary: number;
   avg_salary: number;
   industry_count: number;
 }
@@ -58,7 +59,7 @@ export function ComparisonPanel({
   // Prepare radar chart data
   const maxValues = {
     posting_count: Math.max(...companiesData.map((c) => c.posting_count), 1),
-    avg_salary: Math.max(...companiesData.map((c) => c.avg_salary), 1),
+    median_salary: Math.max(...companiesData.map((c) => c.median_salary ?? c.avg_salary), 1),
     industry_count: Math.max(...companiesData.map((c) => c.industry_count), 1),
   };
 
@@ -73,11 +74,11 @@ export function ComparisonPanel({
       ),
     },
     {
-      metric: "Avg Salary",
+      metric: "Median Salary",
       ...Object.fromEntries(
         companiesData.map((c, i) => [
           `company${i}`,
-          normalizeValue(c.avg_salary, maxValues.avg_salary),
+          normalizeValue(c.median_salary ?? c.avg_salary, maxValues.median_salary),
         ]),
       ),
     },
@@ -270,14 +271,14 @@ export function ComparisonPanel({
                     </tr>
                     <tr className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Avg Salary
+                        Median Salary
                       </td>
                       {companiesData.map((company) => (
                         <td
                           key={company.company_id}
                           className="px-4 py-3 text-sm font-bold text-emerald-600 dark:text-emerald-400"
                         >
-                          ${company.avg_salary.toLocaleString()}
+                          ${(company.median_salary ?? company.avg_salary).toLocaleString()}
                         </td>
                       ))}
                     </tr>

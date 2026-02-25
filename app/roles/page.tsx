@@ -4,7 +4,7 @@ import React, { Suspense } from "react";
 import {
   getTopJobRoles,
   getTopRolesTimeSeries,
-  getAverageSalary,
+  getMedianSalary,
   getTopLocation,
   getRemotePercentage,
   getRoleDistribution,
@@ -38,7 +38,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
     const roles = await getTopJobRoles(20, filters, Number(filters.page ?? 1));
 
     const [
-      avgSalary,
+      medianSalary,
       topLocation,
       remotePercentage,
       roleDistribution,
@@ -48,7 +48,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
       salaryInsights,
       salaryBenchmark,
     ] = await Promise.all([
-      getAverageSalary(filters),
+      getMedianSalary(filters),
       getTopLocation(filters),
       getRemotePercentage(filters),
       getRoleDistribution(10, filters),
@@ -69,7 +69,9 @@ export default async function RolesPage({ searchParams }: PageProps) {
     }
 
     // Salary lookup map for role cards
-    const salaryMap = new Map(salaryBenchmark.map((r) => [r.title, r.avg_salary]));
+    const salaryMap = new Map(
+      salaryBenchmark.map((r) => [r.title, r.median_salary ?? r.avg_salary]),
+    );
 
     const totalRoles = roleDistribution.reduce((sum, r) => sum + r.count, 0);
 
@@ -86,7 +88,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
         {/* Stats Grid */}
         <StatsGrid
           totalRoles={totalRoles}
-          avgSalary={avgSalary}
+          medianSalary={medianSalary}
           topLocation={{
             location: topLocation?.location ?? "N/A",
             count: topLocation?.count ?? 0,
@@ -124,7 +126,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
                 title={r.title}
                 count={Number(r.count)}
                 timeseries={timeseriesMap.get(r.title) ?? []}
-                avgSalary={salaryMap.get(r.title)}
+                medianSalary={salaryMap.get(r.title)}
                 href={
                   slugify(r.title) ? `/roles/${slugify(r.title)}` : undefined
                 }

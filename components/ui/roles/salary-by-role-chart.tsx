@@ -15,7 +15,8 @@ import { slugify } from "@/lib/slugify";
 
 interface RoleSalaryData {
   title: string;
-  avg_salary: number;
+  median_salary: number;
+  avg_salary?: number;
   posting_count: number;
   salary_coverage: number;
 }
@@ -48,7 +49,9 @@ export function SalaryByRoleChart({ data }: SalaryByRoleChartProps) {
   }
 
   // Sort ascending so highest-paying role renders at the top of the horizontal chart
-  const sorted = [...data].sort((a, b) => a.avg_salary - b.avg_salary);
+  const sorted = [...data].sort(
+    (a, b) => (a.median_salary ?? a.avg_salary ?? 0) - (b.median_salary ?? b.avg_salary ?? 0),
+  );
 
   const handleBarClick = (entry: RoleSalaryData) => {
     const slug = slugify(entry.title);
@@ -60,7 +63,7 @@ export function SalaryByRoleChart({ data }: SalaryByRoleChartProps) {
       <CardHeader>
         <CardTitle>Salary Benchmark by Role</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Average annual salary — click any bar to explore
+          Median annual salary — click any bar to explore
         </p>
       </CardHeader>
       <CardContent>
@@ -91,9 +94,9 @@ export function SalaryByRoleChart({ data }: SalaryByRoleChartProps) {
                       <p className="font-semibold mb-1">{d.title}</p>
                       <p>
                         <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                          ${d.avg_salary.toLocaleString()}
+                          ${(d.median_salary ?? d.avg_salary ?? 0).toLocaleString()}
                         </span>{" "}
-                        avg salary
+                        median salary
                       </p>
                       <p className="text-muted-foreground">
                         {d.posting_count.toLocaleString()} total postings
@@ -109,7 +112,7 @@ export function SalaryByRoleChart({ data }: SalaryByRoleChartProps) {
               }}
             />
             <Bar
-              dataKey="avg_salary"
+              dataKey="median_salary"
               radius={[0, 4, 4, 0]}
               onClick={handleBarClick}
               className="cursor-pointer"

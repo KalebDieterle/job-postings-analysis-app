@@ -13,8 +13,11 @@ interface SalaryInsight {
 }
 
 export function SalaryInsightsPanel({ data }: { data: SalaryInsight }) {
-  const salaryRange = data.maxSalary - data.minSalary;
-  const medianPercentage = ((data.medianSalary - data.minSalary) / salaryRange) * 100;
+  const salaryRange = Math.max(data.maxSalary - data.minSalary, 1);
+  const medianPercentage = Math.min(
+    100,
+    Math.max(0, ((data.medianSalary - data.minSalary) / salaryRange) * 100)
+  );
 
   return (
     <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 hover:shadow-lg transition-all">

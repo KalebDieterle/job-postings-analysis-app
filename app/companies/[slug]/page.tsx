@@ -144,13 +144,13 @@ export default async function CompanySlugPage({ params }: PageProps) {
           <Card className="glass-card rounded-xl p-6 border-primary/30 bg-primary/5">
             <CardHeader>
               <CardTitle className="text-sm text-slate-400">
-                Avg Salary
+                Median Salary
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-primary">
-                {jobStats.avg_salary
-                  ? `$${Number(jobStats.avg_salary).toLocaleString()}`
+                {jobStats.median_salary ?? jobStats.avg_salary
+                  ? `$${Number(jobStats.median_salary ?? jobStats.avg_salary).toLocaleString()}`
                   : "N/A"}
               </div>
               <div className="text-sm text-emerald-400 mt-1">
@@ -194,7 +194,7 @@ export default async function CompanySlugPage({ params }: PageProps) {
                       Openings
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-muted-foreground text-right uppercase">
-                      Avg Salary
+                      Median Salary
                     </th>
                   </tr>
                 </thead>
@@ -211,8 +211,8 @@ export default async function CompanySlugPage({ params }: PageProps) {
                         {role.count}
                       </td>
                       <td className="px-6 py-4 text-sm text-right text-slate-300">
-                        {role.avg_salary
-                          ? `$${Number(role.avg_salary).toLocaleString()}`
+                        {role.median_salary ?? role.avg_salary
+                          ? `$${Number(role.median_salary ?? role.avg_salary).toLocaleString()}`
                           : "N/A"}
                       </td>
                     </tr>

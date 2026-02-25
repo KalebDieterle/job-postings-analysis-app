@@ -161,7 +161,7 @@ export function CompaniesFilterBar() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="postings">Most Job Postings</SelectItem>
-              <SelectItem value="salary">Highest Salary</SelectItem>
+              <SelectItem value="salary">Highest Median Salary</SelectItem>
               <SelectItem value="name">Company Name</SelectItem>
               <SelectItem value="size">Largest Companies</SelectItem>
             </SelectContent>
@@ -213,7 +213,7 @@ export function CompaniesFilterBar() {
               <div className="space-y-3">
                 <label className="text-sm font-medium flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  Min Avg Salary
+                  Min Median Salary
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -233,7 +233,7 @@ export function CompaniesFilterBar() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Filter companies with avg salary above this threshold
+                  Filter companies with median salary above this threshold
                 </p>
               </div>
 

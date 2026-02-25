@@ -16,6 +16,7 @@ import {
 // Data structure for the chart points
 interface CompanyData {
   company: string;
+  median_salary: number;
   avg_salary: number;
   posting_count?: number;
   employee_count?: number;
@@ -25,13 +26,13 @@ interface CompanyData {
 // Component Props
 interface CompanyAvgSalaryGraphProps {
   data: CompanyData[];
-  globalAvg: number;
+  globalMedian: number;
   fortuneData: CompanyData[];
 }
 
 export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
   data,
-  globalAvg,
+  globalMedian,
   fortuneData,
 }) => {
   // Mode restricted to 'salary' (Market) or 'fortune' (Top 10 NW)
@@ -42,20 +43,20 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
     const source = viewMode === "fortune" ? fortuneData : data;
 
     return [...source]
-      .filter((item) => item.avg_salary > 0) // Hides companies with no valid salary data
+      .filter((item) => (item.median_salary ?? item.avg_salary) > 0)
       .filter((item) => !item.company.toLowerCase().includes("eox vantage")) // Filter out EOX Vantage
       .sort(
         (a, b) =>
           viewMode === "fortune"
             ? (a.fortune_rank ?? 0) - (b.fortune_rank ?? 0) // Rank-based sorting
-            : b.avg_salary - a.avg_salary, // Value-based sorting
+            : (b.median_salary ?? b.avg_salary) - (a.median_salary ?? a.avg_salary),
       );
   }, [data, viewMode, fortuneData]);
 
   // Dynamic bar coloring based on market average
   const getBarColor = (salary: number) => {
-    const diff = ((salary - globalAvg) / globalAvg) * 100;
-    return diff > 0 ? "#10b981" : "#fbbf24"; // Emerald for above avg, Amber for below
+    const diff = globalMedian > 0 ? ((salary - globalMedian) / globalMedian) * 100 : 0;
+    return diff > 0 ? "#10b981" : "#fbbf24";
   };
 
   // Custom Tooltip for the dark theme
@@ -68,7 +69,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
         <p className="font-bold text-white text-sm mb-1">{item.company}</p>
         <div className="space-y-1">
           <p className="text-emerald-400 text-lg font-bold">
-            ${Math.round(item.avg_salary).toLocaleString()}
+            ${Math.round(item.median_salary ?? item.avg_salary).toLocaleString()}
           </p>
           {item.fortune_rank && (
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">
@@ -111,7 +112,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
                 : "text-slate-500 hover:text-slate-300"
             }`}
           >
-            Highest Avg Salary
+            Highest Median Salary
           </button>
         </div>
       </div>
@@ -145,22 +146,22 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
               cursor={{ fill: "rgba(255,255,255,0.03)" }}
             />
 
-            <Bar dataKey="avg_salary" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="median_salary" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={getBarColor(entry.avg_salary)}
+                  fill={getBarColor(entry.median_salary ?? entry.avg_salary)}
                 />
               ))}
             </Bar>
 
             <ReferenceLine
-              y={globalAvg}
+              y={globalMedian}
               stroke="#ef4444"
               strokeWidth={2}
               strokeDasharray="4 4"
               label={{
-                value: "Market Avg",
+                value: "Market Median",
                 position: "insideBottomRight",
                 fill: "#ef4444",
                 fontSize: 10,

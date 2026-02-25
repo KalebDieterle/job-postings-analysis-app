@@ -96,7 +96,7 @@ export function SalaryDistributionChart({
 }: SalaryDistributionChartProps) {
   const data = [
     { name: "Minimum", value: Number(avgMinSalary || 0), fill: "#ef4444" },
-    { name: "Average", value: Number(avgMedSalary || 0), fill: "#3b82f6" },
+    { name: "Median", value: Number(avgMedSalary || 0), fill: "#3b82f6" },
     { name: "Maximum", value: Number(avgMaxSalary || 0), fill: "#10b981" },
   ].filter((item) => item.value > 0);
 
@@ -124,7 +124,7 @@ export function SalaryDistributionChart({
           <CardTitle>Salary Distribution</CardTitle>
         </div>
         <p className="text-sm text-muted-foreground">
-          Average salary ranges across all positions
+          Median-centered salary ranges across all positions
         </p>
       </CardHeader>
       <CardContent>

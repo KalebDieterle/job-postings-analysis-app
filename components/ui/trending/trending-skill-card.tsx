@@ -118,7 +118,7 @@ export function TrendingSkillCard({
           <div className="space-y-1">
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <DollarSign className="h-3 w-3" />
-              <span>Avg Salary</span>
+              <span>Median Salary</span>
             </div>
             <p className="text-lg font-bold">{formattedSalary}</p>
           </div>

@@ -66,7 +66,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
       <CardHeader>
         <CardTitle>Demand vs Salary Analysis</CardTitle>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Explore the relationship between skill demand and average salary.
+          Explore the relationship between skill demand and median salary.
           Bubble size indicates growth rate.
         </p>
       </CardHeader>
@@ -96,7 +96,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
                 dataKey="y"
                 name="Salary"
                 label={{
-                  value: "Average Salary ($)",
+                  value: "Median Salary ($)",
                   angle: -90,
                   position: "left",
                   offset: 40,

@@ -64,26 +64,31 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
   const companies = companiesRaw.slice(0, limit).map((company: any) => ({
     ...company,
     postings_count: Number(company.postings_count ?? 0),
-    avg_salary: Number(company.avg_salary ?? 0),
+    median_salary: Number(company.median_salary ?? company.avg_salary ?? 0),
+    avg_salary: Number(company.median_salary ?? company.avg_salary ?? 0),
     company_size: company.company_size?.toString() || "N/A",
     slug: slugify(company.name ?? ""),
   }));
 
   const salaryData = salaryResults.slice(0, 10).map((row: any) => ({
     company: row.company,
-    avg_salary: Number(row.avg_salary ?? 0),
+    median_salary: Number(row.median_salary ?? row.avg_salary ?? 0),
+    avg_salary: Number(row.median_salary ?? row.avg_salary ?? 0),
     posting_count: Number(row.posting_count ?? 0),
   }));
 
   const fortuneData = fortuneResults.map((row: any) => ({
     company: row.company,
-    avg_salary: Number(row.avg_salary ?? 0),
+    median_salary: Number(row.median_salary ?? row.avg_salary ?? 0),
+    avg_salary: Number(row.median_salary ?? row.avg_salary ?? 0),
     employee_count: Number(row.employee_count ?? 0),
     fortune_rank: Number(row.fortune_rank ?? 0),
     posting_count: Number(row.posting_count ?? 0),
   }));
 
-  const globalAvg = Number(salaryResults[0]?.global_avg_salary ?? 0);
+  const globalMedian = Number(
+    salaryResults[0]?.global_median_salary ?? salaryResults[0]?.global_avg_salary ?? 0,
+  );
 
   const buildPageUrl = (pageNum: number) => {
     const params = new URLSearchParams();
@@ -126,26 +131,26 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-lg font-bold">Avg Salary Benchmarks</h3>
+              <h3 className="text-lg font-bold">Median Salary Benchmarks</h3>
               <p className="text-sm text-muted-foreground">
-                Top companies by average salary
+                Top companies by median salary
               </p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-primary">
                 $
-                {globalAvg.toLocaleString(undefined, {
+                {globalMedian.toLocaleString(undefined, {
                   maximumFractionDigits: 0,
                 })}
               </div>
               <div className="text-xs text-muted-foreground">
-                Global average
+                Global median
               </div>
             </div>
           </div>
           <CompanyAvgSalaryGraph
             data={salaryData}
-            globalAvg={globalAvg}
+            globalMedian={globalMedian}
             fortuneData={fortuneData}
           />
         </div>

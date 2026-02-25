@@ -93,6 +93,7 @@ interface AdvancedStatsPanelProps {
   stats: {
     totalSkills: number;
     avgDemand: number;
+    medianSalary?: number;
     avgSalary: number;
     topSkill: string;
     topSkillCount: number;
@@ -133,8 +134,8 @@ export function AdvancedStatsPanel({ stats }: AdvancedStatsPanelProps) {
       },
     },
     {
-      label: "Average Salary",
-      value: formatSalary(stats.avgSalary),
+      label: "Median Salary",
+      value: formatSalary(stats.medianSalary ?? stats.avgSalary),
       icon: DollarSign,
       gradient: "from-purple-500 to-pink-500",
       trend: {

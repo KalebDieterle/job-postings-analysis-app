@@ -2,13 +2,15 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Briefcase, DollarSign, Building2, Code } from "lucide-react";
+import { Briefcase, DollarSign, Building2, Code, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface HeroStatsProps {
   data: {
     totalJobs: number;
+    medianSalary?: number;
     avgSalary: number;
+    salarySampleSize?: number;
     totalCompanies: number;
     totalSkills: number;
     monthlyGrowth: number;
@@ -55,7 +57,7 @@ function StatCard({
   prefix = "",
   suffix = ""
 }: { 
-  icon: any; 
+  icon: LucideIcon; 
   title: string; 
   value: number; 
   change: string; 
@@ -69,9 +71,9 @@ function StatCard({
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <p className="text-sm font-medium text-white/80">{title}</p>
-            <p className="text-4xl font-bold text-white">
+            <div className="text-4xl font-bold text-white">
               <AnimatedNumber value={value} prefix={prefix} suffix={suffix} />
-            </p>
+            </div>
             <p className="text-xs text-white/70 flex items-center gap-1">
               <span className="text-green-300">↑</span>
               {change}
@@ -87,14 +89,21 @@ function StatCard({
 }
 
 export function HeroStats({ data }: HeroStatsProps) {
-  const { totalJobs, avgSalary, totalCompanies, totalSkills, monthlyGrowth } = data;
+  const { totalJobs, medianSalary, avgSalary, salarySampleSize, totalCompanies, totalSkills, monthlyGrowth } = data;
+  const salaryToDisplay = medianSalary ?? avgSalary;
   
   return (
     <div className="w-full bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 py-12 px-4 mb-8">
       <div className="container mx-auto">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold mb-2">Job Market Overview</h2>
-          <p className="text-muted-foreground">Real-time insights from the latest job market data</p>
+          <p className="text-muted-foreground">
+            Real-time insights from the latest job market data
+            {salarySampleSize ? ` · Salary sample: ${salarySampleSize.toLocaleString()} postings` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Quality-filtered annualized salary across all sources.
+          </p>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
@@ -107,8 +116,8 @@ export function HeroStats({ data }: HeroStatsProps) {
           />
           <StatCard
             icon={DollarSign}
-            title="Average Salary"
-            value={avgSalary}
+            title="Median Salary"
+            value={salaryToDisplay}
             change="+5% vs last quarter"
             gradient="bg-gradient-to-br from-green-500 to-green-700"
             prefix="$"

@@ -173,24 +173,24 @@ export default async function RoleDetailPage({ params }: PageProps) {
             description="Total active positions"
           />
           <StatCard
-            title="Avg Floor Salary"
+            title="Median Floor Salary"
             value={
-              stats.avg_min_salary
-                ? `$${Math.round(Number(stats.avg_min_salary)).toLocaleString()}`
+              stats.median_min_salary
+                ? `$${Math.round(Number(stats.median_min_salary)).toLocaleString()}`
                 : "N/A"
             }
             icon={DollarSign}
-            description="Entry-level average"
+            description="Entry-level median"
           />
           <StatCard
-            title="Avg Ceiling Salary"
+            title="Median Ceiling Salary"
             value={
-              stats.avg_max_salary
-                ? `$${Math.round(Number(stats.avg_max_salary)).toLocaleString()}`
+              stats.median_max_salary
+                ? `$${Math.round(Number(stats.median_max_salary)).toLocaleString()}`
                 : "N/A"
             }
             icon={DollarSign}
-            description="Senior-level average"
+            description="Senior-level median"
           />
           <StatCard
             title="Hiring Velocity"

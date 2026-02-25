@@ -4,11 +4,28 @@ import {
   roleAliases, top_companies, postings, employee_counts, company_industries 
 } from './schema';
 import { 
-  eq, sql, count, desc, asc, inArray, ilike, gte, and, not, lt, gt, avg, isNotNull 
+  eq, sql, count, desc, asc, inArray, ilike, gte, lte, and, not, lt, gt, avg, isNotNull 
 } from 'drizzle-orm';
 
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
+
+const VALID_ANNUAL_SALARY_MIN = 20_000;
+const VALID_ANNUAL_SALARY_MAX = 500_000;
+
+function validAnnualSalaryFilter(alias: string): ReturnType<typeof sql.raw> {
+  return sql.raw(`
+    ${alias}.yearly_min_salary IS NOT NULL
+    AND ${alias}.yearly_min_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+    AND (
+      ${alias}.yearly_max_salary IS NULL
+      OR (
+        ${alias}.yearly_max_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+        AND ${alias}.yearly_max_salary >= ${alias}.yearly_min_salary
+      )
+    )
+  `);
+}
 
 /**
  * Get the date range for the most recent N days of data in the dataset.
@@ -249,18 +266,29 @@ export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
 export async function getRoleStats(roleTitle: string) {
   const roleLower = roleTitle.toLowerCase();
 
-  // UPDATED: Now uses yearly_min/max columns directly
   const results = await db
     .select({
       total_jobs: count(),
-      avg_min_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
-      avg_max_salary: sql<number>`avg(${postings.yearly_max_salary}) filter (where ${postings.yearly_max_salary} > 0)`,
+      median_min_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary}) filter (
+        where ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+      )`,
+      median_max_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary}) filter (
+        where ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+      )`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`lower(postings.title) = lower(${roleAliases.alias})`)
     .where(sql`coalesce(lower(${roleAliases.canonical_name}), lower(postings.title)) = ${roleLower}`);
 
-  return results[0] || { total_jobs: 0, avg_min_salary: null, avg_max_salary: null };
+  const row = results[0] || { total_jobs: 0, median_min_salary: null, median_max_salary: null };
+  return {
+    total_jobs: row.total_jobs,
+    median_min_salary: row.median_min_salary,
+    median_max_salary: row.median_max_salary,
+    // compatibility aliases
+    avg_min_salary: row.median_min_salary,
+    avg_max_salary: row.median_max_salary,
+  };
 }
 
 // ===========================
@@ -291,7 +319,9 @@ export async function getAllSkills(params: { page?: number; limit?: number; sear
     .select({
       name: skills.skill_name,
       count: count(),
-      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
+      median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary}) filter (
+        where ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+      )`,
     })
     .from(skills)
     .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
@@ -302,7 +332,10 @@ export async function getAllSkills(params: { page?: number; limit?: number; sear
     .limit(limit)
     .offset(offset);
 
-  return data;
+  return data.map((row) => ({
+    ...row,
+    avg_salary: row.median_salary, // compatibility alias
+  }));
 }
 
 // ===========================
@@ -315,7 +348,9 @@ export async function getSkillDetails(skillName: string) {
   const stats = await db
     .select({
       count: sql<number>`count(*)::int`,
-      avgSalary: sql<number>`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0)::float`,
+      medianSalary: sql<number>`coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary}) filter (
+        where ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+      ), 0)::float`,
     })
     .from(postings)
     .innerJoin(job_skills, eq(postings.job_id, job_skills.job_id))
@@ -335,11 +370,12 @@ export async function getSkillDetails(skillName: string) {
     .orderBy(desc(sql`count(*)`))
     .limit(5);
 
-  const baseStats = stats[0] || { count: 0, avgSalary: 0 };
+  const baseStats = stats[0] || { count: 0, medianSalary: 0 };
 
   return {
     count: Number(baseStats.count),
-    avgSalary: Number(baseStats.avgSalary),
+    medianSalary: Number(baseStats.medianSalary),
+    avgSalary: Number(baseStats.medianSalary), // compatibility alias
     topEmployers: topEmployers || [],
     marketShare: baseStats.count > 0 ? ((Number(baseStats.count) / 123849) * 100).toFixed(2) : "0.00",
   };
@@ -532,10 +568,23 @@ export async function getAllCompanyData({
     sizeConditions.push(sql`(${sql.join(sizeRanges, sql` OR `)})`);
   }
 
+  const salaryCaseExpr = sql`CASE
+    WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+      AND (
+        ${postings.yearly_max_salary} IS NULL
+        OR (
+          ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+          AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+        )
+      )
+    THEN ${postings.yearly_min_salary}
+  END`;
+
   // Determine sort order
   const sortOrder = (() => {
     switch (sort) {
-      case "salary": return desc(sql`COALESCE(AVG(${postings.yearly_max_salary})::int, 0)`);
+      case "salary":
+        return desc(sql`COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${salaryCaseExpr}), 0)`);
       case "name": return asc(companies.name);
       case "size": return desc(sql`MAX(${employee_counts.employee_count})`);
       default: return desc(sql`COUNT(${postings.job_id})`);
@@ -561,7 +610,9 @@ export async function getAllCompanyData({
     havingConditions.push(sql`COUNT(${postings.job_id}) >= ${minPostings}`);
   }
   if (minSalary > 0) {
-    havingConditions.push(sql`COALESCE(AVG(${postings.yearly_max_salary})::int, 0) >= ${minSalary}`);
+    havingConditions.push(
+      sql`COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${salaryCaseExpr}), 0) >= ${minSalary}`
+    );
   }
   havingConditions.push(...sizeConditions);
 
@@ -573,7 +624,8 @@ export async function getAllCompanyData({
       country: companies.country,
       company_size: sql<number>`MAX(${employee_counts.employee_count})`,
       postings_count: sql<number>`COUNT(DISTINCT ${postings.job_id})::int`,
-      avg_salary: sql<number>`COALESCE(AVG(${postings.yearly_max_salary})::int, 0)`,
+      median_salary: sql<number>`COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${salaryCaseExpr}), 0)::int`,
+      avg_salary: sql<number>`COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${salaryCaseExpr}), 0)::int`,
     })
     .from(companies)
     .leftJoin(postings, eq(companies.name, postings.company_name))
@@ -601,39 +653,58 @@ export async function getAverageCompanySalary() {
       .select({
         company_id: companies.company_id,
         company: companies.name,
-        // FIX: Using Median (percentile_cont) instead of AVG to ignore outliers 🚀
-        avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary})`.as("avg_salary"),
+        median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`.as("median_salary"),
+        avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`.as("avg_salary"),
         posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
       })
       .from(companies)
       .innerJoin(postings, sql`LOWER(${companies.name}) = LOWER(${postings.company_name})`)
-      // SANITY FILTER: Exclude obvious data errors (e.g., $208M or $0)
       .where(and(
-        gt(postings.yearly_max_salary, 10000), 
-        lt(postings.yearly_max_salary, 1500000)
+        gte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MIN),
+        lte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MAX),
+        sql`(
+          ${postings.yearly_max_salary} IS NULL
+          OR (
+            ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+          )
+        )`
       ))
       .groupBy(companies.company_id, companies.name)
   );
 
   const globalAvgCte = db.$with("global_avg").as(
     db.select({
-      global_avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary})`.as("global_avg_salary"),
+      global_median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`.as("global_median_salary"),
+      global_avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`.as("global_avg_salary"),
     })
     .from(postings)
-    .where(and(gt(postings.yearly_max_salary, 10000), lt(postings.yearly_max_salary, 1500000)))
+    .where(and(
+      gte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MIN),
+      lte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MAX),
+      sql`(
+        ${postings.yearly_max_salary} IS NULL
+        OR (
+          ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+          AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+        )
+      )`
+    ))
   );
 
   return db
     .with(companyAvgCte, globalAvgCte)
     .select({
       company: companyAvgCte.company,
+      median_salary: companyAvgCte.median_salary,
       avg_salary: companyAvgCte.avg_salary,
       posting_count: companyAvgCte.posting_count,
+      global_median_salary: globalAvgCte.global_median_salary,
       global_avg_salary: globalAvgCte.global_avg_salary,
     })
     .from(companyAvgCte)
     .crossJoin(globalAvgCte)
-    .orderBy(desc(companyAvgCte.avg_salary))
+    .orderBy(desc(companyAvgCte.median_salary))
     .limit(10);
 }
 
@@ -647,8 +718,32 @@ export async function getTopCompaniesBySize() {
         company_id: companies.company_id,
         company: companies.name,
         employee_count: employee_counts.employee_count,
-        // UPDATED: Now uses yearly_min_salary, excluding $0 values
-        avg_salary: sql<number>`avg(case when ${postings.yearly_min_salary} > 0 then ${postings.yearly_min_salary} end)`.as("avg_salary"),
+        median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY CASE
+            WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+              AND (
+                ${postings.yearly_max_salary} IS NULL
+                OR (
+                  ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                  AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                )
+              )
+            THEN ${postings.yearly_min_salary}
+          END
+        )`.as("median_salary"),
+        avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY CASE
+            WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+              AND (
+                ${postings.yearly_max_salary} IS NULL
+                OR (
+                  ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                  AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                )
+              )
+            THEN ${postings.yearly_min_salary}
+          END
+        )`.as("avg_salary"),
         posting_count: sql<number>`COUNT(${postings.job_id})::int`.as("posting_count"),
       })
       .from(companies)
@@ -659,7 +754,12 @@ export async function getTopCompaniesBySize() {
 
   const globalAvgCte = db.$with("global_avg").as(
     db.select({
-      global_avg_salary: sql<number>`avg(case when ${postings.yearly_min_salary} > 0 then ${postings.yearly_min_salary} end)`.as("global_avg_salary"),
+      global_median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY CASE WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX} THEN ${postings.yearly_min_salary} END
+      )`.as("global_median_salary"),
+      global_avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY CASE WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX} THEN ${postings.yearly_min_salary} END
+      )`.as("global_avg_salary"),
     }).from(postings)
   );
 
@@ -668,8 +768,10 @@ export async function getTopCompaniesBySize() {
     .select({
       company: companySizeCte.company,
       employee_count: companySizeCte.employee_count,
+      median_salary: companySizeCte.median_salary,
       avg_salary: companySizeCte.avg_salary,
       posting_count: companySizeCte.posting_count,
+      global_median_salary: globalAvgCte.global_median_salary,
       global_avg_salary: globalAvgCte.global_avg_salary,
     })
     .from(companySizeCte)
@@ -710,8 +812,8 @@ export async function getAvgSalaryPerEmployeeForTop10Fortune() {
     .select({
       company: top_companies.name,
       fortune_rank: top_companies.fortune_rank,
-      // Robust AVG with the sanity filter applied below
-      avg_salary: sql<number>`avg(case when ${postings.yearly_max_salary} > 0 then ${postings.yearly_max_salary} end)`.mapWith(Number), 
+      median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`.mapWith(Number),
+      avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`.mapWith(Number),
       employee_count: sql<number>`COALESCE(${latestCounts.employee_count}, 0)`.mapWith(Number),
       posting_count: sql<number>`COUNT(${postings.job_id})`.mapWith(Number),
     })
@@ -719,10 +821,16 @@ export async function getAvgSalaryPerEmployeeForTop10Fortune() {
     .innerJoin(companies, eq(top_companies.name, companies.name))
     .leftJoin(latestCounts, eq(companies.company_id, latestCounts.company_id))
     .leftJoin(postings, eq(companies.name, postings.company_name))
-    // FIX: Sanity filter to keep the graph realistic 🚀
     .where(and(
-      gt(postings.yearly_max_salary, 20000), 
-      lt(postings.yearly_max_salary, 1200000)
+      gte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MIN),
+      lte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MAX),
+      sql`(
+        ${postings.yearly_max_salary} IS NULL
+        OR (
+          ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+          AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+        )
+      )`
     ))
     .groupBy(top_companies.name, top_companies.fortune_rank, latestCounts.employee_count)
     .orderBy(top_companies.fortune_rank)
@@ -743,8 +851,32 @@ export async function getCompanyJobStats(companyName: string) {
     .select({
       total_postings: sql<number>`COUNT(*)::int`,
       active_postings: sql<number>`COUNT(CASE WHEN ${postings.closed_time} IS NULL THEN 1 END)::int`,
-      // UPDATED: Now uses yearly_min_salary, excluding $0 values
-      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
+      median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY CASE
+          WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            AND (
+              ${postings.yearly_max_salary} IS NULL
+              OR (
+                ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          THEN ${postings.yearly_min_salary}
+        END
+      )`,
+      avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY CASE
+          WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            AND (
+              ${postings.yearly_max_salary} IS NULL
+              OR (
+                ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          THEN ${postings.yearly_min_salary}
+        END
+      )`,
       remote_count: sql<number>`SUM(CASE WHEN ${postings.remote_allowed} IN ('1', 'true') THEN 1 ELSE 0 END)::int`,
     })
     .from(postings)
@@ -758,8 +890,32 @@ export async function getCompanyTopRoles(companyName: string, limit = 10) {
     .select({
       title: sql<string>`COALESCE(${roleAliases.canonical_name}, ${postings.title})`,
       count: sql<number>`COUNT(*)::int`,
-      // UPDATED: Now uses yearly_min_salary, excluding $0 values
-      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
+      median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY CASE
+          WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            AND (
+              ${postings.yearly_max_salary} IS NULL
+              OR (
+                ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          THEN ${postings.yearly_min_salary}
+        END
+      )`,
+      avg_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY CASE
+          WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            AND (
+              ${postings.yearly_max_salary} IS NULL
+              OR (
+                ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          THEN ${postings.yearly_min_salary}
+        END
+      )`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`)
@@ -882,37 +1038,57 @@ export async function getJobsByLocation() {
  * Get aggregated stats by city across all companies
  */
 export async function getJobsByCity() {
-  // Join with companies table to get geocoded lat/lng coordinates
-  // Uses postings.location for grouping since it has 100% coverage
+  const cityExpr = sql<string>`
+    CASE 
+      WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN TRIM(SPLIT_PART(${postings.location}, ',', 1))
+      WHEN ${postings.location} ~ '^[^,]+, [^,]+$' THEN TRIM(SPLIT_PART(${postings.location}, ',', 1))
+      ELSE ${postings.location}
+    END
+  `;
+  const stateExpr = sql<string>`
+    CASE 
+      WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN TRIM(SPLIT_PART(${postings.location}, ',', 2))
+      WHEN ${postings.location} ~ '^[^,]+, [^,]+$' THEN TRIM(SPLIT_PART(${postings.location}, ',', 2))
+      ELSE NULL
+    END
+  `;
+
   return await db
     .select({
-      location: postings.location,
-      city: sql<string>`
-        CASE 
-          WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN 
-            TRIM(SPLIT_PART(${postings.location}, ',', 1))
-          WHEN ${postings.location} ~ '^[^,]+, [^,]+$' THEN 
-            TRIM(SPLIT_PART(${postings.location}, ',', 1))
-          ELSE ${postings.location}
-        END
-      `,
-      state: sql<string>`
-        CASE 
-          WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN 
-            TRIM(SPLIT_PART(${postings.location}, ',', 2))
-          WHEN ${postings.location} ~ '^[^,]+, [^,]+$' THEN 
-            TRIM(SPLIT_PART(${postings.location}, ',', 2))
-          ELSE NULL
-        END
-      `,
+      location: cityExpr,
+      city: cityExpr,
+      state: stateExpr,
       country: postings.country,
-      // Get coordinates from companies table (will be null until geocoding completes)
       lat: sql<number | null>`MAX(${companies.lat})`,
       lng: sql<number | null>`MAX(${companies.lng})`,
       jobCount: sql<number>`count(distinct ${postings.job_id})::int`,
-      companyCount: sql<number>`count(distinct ${postings.company_id})::int`,
-      // Sanity filter: exclude salaries < $10k or > $1.5M to avoid outliers
-      avgSalary: sql<number>`round(avg(case when ${postings.yearly_min_salary} > 10000 and ${postings.yearly_max_salary} > 10000 and ${postings.yearly_max_salary} < 1500000 then (${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2 end))::int`,
+      companyCount: sql<number>`count(distinct lower(trim(${postings.company_name})))::int`,
+      medianSalary: sql<number>`round(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ))::int`,
+      avgSalary: sql<number>`round(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ))::int`,
       remoteRatio: sql<number>`(
         count(*) FILTER (WHERE ${postings.remote_allowed} IN ('1', 'true'))::float / NULLIF(count(*), 0)
       )`,
@@ -928,7 +1104,7 @@ export async function getJobsByCity() {
         sql`${postings.location} != ''`
       )
     )
-    .groupBy(postings.location, postings.country)
+    .groupBy(cityExpr, stateExpr, postings.country)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`));
 }
 
@@ -946,7 +1122,32 @@ export async function getJobsByCountry() {
     .select({
       country: postings.country,
       jobCount: sql<number>`count(distinct ${postings.job_id})::int`.as('job_count'),
-      avgSalary: sql<number>`round(avg(case when ${postings.yearly_min_salary} > 0 and ${postings.yearly_max_salary} > 0 then (${postings.yearly_min_salary} + ${postings.yearly_max_salary}) / 2 end))::int`.as('avg_salary'),
+      medianSalary: sql<number>`round(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ))::int`.as('median_salary'),
+      avgSalary: sql<number>`round(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ))::int`.as('avg_salary'),
       cities: sql<string[]>`array_agg(distinct ${postings.location})`.as('cities'),
     })
     .from(postings)
@@ -972,9 +1173,34 @@ export async function getLocationStats(locationSlug: string) {
       country: companies.country,
       totalJobs: sql<number>`count(distinct ${postings.job_id})`.as("total_jobs"),
       totalCompanies: sql<number>`count(distinct ${postings.company_id})`.as("total_companies"),
-      avgMinSalary: sql<number>`min(${postings.yearly_min_salary})`.as("avg_min_salary"),
-      avgMaxSalary: sql<number>`max(${postings.yearly_max_salary})`.as("avg_max_salary"),
-      avgMedSalary: sql<number>`round(avg(${postings.yearly_med_salary}))`.as("avg_med_salary"),
+      medianMinSalary: sql<number>`percentile_cont(0.5) within group (
+        order by case when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX} then ${postings.yearly_min_salary} end
+      )`.as("median_min_salary"),
+      medianMaxSalary: sql<number>`percentile_cont(0.5) within group (
+        order by case when ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX} then ${postings.yearly_max_salary} end
+      )`.as("median_max_salary"),
+      medianSalary: sql<number>`round(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_med_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            then ${postings.yearly_med_salary}
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            then ${postings.yearly_min_salary}
+        end
+      ))`.as("median_salary"),
+      avgMinSalary: sql<number>`percentile_cont(0.5) within group (
+        order by case when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX} then ${postings.yearly_min_salary} end
+      )`.as("avg_min_salary"),
+      avgMaxSalary: sql<number>`percentile_cont(0.5) within group (
+        order by case when ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX} then ${postings.yearly_max_salary} end
+      )`.as("avg_max_salary"),
+      avgMedSalary: sql<number>`round(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_med_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            then ${postings.yearly_med_salary}
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            then ${postings.yearly_min_salary}
+        end
+      ))`.as("avg_med_salary"),
       // Fix: Robust string comparison
       remoteJobs: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as("remote_jobs"),
       totalViews: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.views}, ''), '0') AS numeric)) AS bigint))`.as("total_views"),
@@ -1087,7 +1313,9 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+        COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (
+          ORDER BY CASE WHEN p.yearly_min_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX} THEN p.yearly_min_salary END
+        ), 0)::float as median_salary
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
@@ -1100,7 +1328,9 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+        COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (
+          ORDER BY CASE WHEN p.yearly_min_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX} THEN p.yearly_min_salary END
+        ), 0)::float as median_salary
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
@@ -1111,13 +1341,13 @@ export async function getTrendingSkills(timeframeDays: number = 30, limit: numbe
       c.name,
       c.count as current_count,
       COALESCE(p.count, 0)::int as previous_count,
-      c.avg_salary as current_salary,
-      COALESCE(p.avg_salary, 0)::float as previous_salary,
+      c.median_salary as current_salary,
+      COALESCE(p.median_salary, 0)::float as previous_salary,
       CASE 
         WHEN COALESCE(p.count, 0) = 0 THEN 100.0
         ELSE ROUND(((c.count - COALESCE(p.count, 0))::float / GREATEST(p.count, 1)::float * 100)::numeric, 1)
       END as growth_percentage,
-      ROUND((c.avg_salary - COALESCE(p.avg_salary, 0))::numeric, 0) as salary_change,
+      ROUND((c.median_salary - COALESCE(p.median_salary, 0))::numeric, 0) as salary_change,
       CASE
         WHEN COALESCE(p.count, 0) = 0 AND c.count > 10 THEN 'breakout'
         WHEN c.count > COALESCE(p.count, 0) THEN 'rising'
@@ -1161,7 +1391,9 @@ export async function getTrendingStats(timeframe: number = 30) {
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+        COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (
+          ORDER BY CASE WHEN p.yearly_min_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX} THEN p.yearly_min_salary END
+        ), 0)::float as median_salary
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
@@ -1174,7 +1406,9 @@ export async function getTrendingStats(timeframe: number = 30) {
       SELECT 
         s.skill_name as name,
         COUNT(*)::int as count,
-        COALESCE(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0), 0)::float as avg_salary
+        COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (
+          ORDER BY CASE WHEN p.yearly_min_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX} THEN p.yearly_min_salary END
+        ), 0)::float as median_salary
       FROM "skills" s
       INNER JOIN "job_skills" js ON s.skill_abr = js.skill_abr
       INNER JOIN "postings" p ON js.job_id = p.job_id
@@ -1186,13 +1420,13 @@ export async function getTrendingStats(timeframe: number = 30) {
         c.name,
         c.count as current_count,
         COALESCE(p.count, 0) as previous_count,
-        c.avg_salary as current_salary,
-        COALESCE(p.avg_salary, 0) as previous_salary,
+        c.median_salary as current_salary,
+        COALESCE(p.median_salary, 0) as previous_salary,
         CASE 
           WHEN COALESCE(p.count, 0) = 0 THEN 100.0
           ELSE ROUND(((c.count - COALESCE(p.count, 0))::float / GREATEST(p.count, 1)::float * 100)::numeric, 1)
         END as growth_percentage,
-        ROUND((c.avg_salary - COALESCE(p.avg_salary, 0))::numeric, 0) as salary_change
+        ROUND((c.median_salary - COALESCE(p.median_salary, 0))::numeric, 0) as salary_change
       FROM current_period c
       LEFT JOIN previous_period p ON c.name = p.name
     )
@@ -1232,10 +1466,27 @@ export async function getTrendingStats(timeframe: number = 30) {
 export async function getAverageSalary(
   filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
 ) {
+  return getMedianSalary(filters);
+}
+
+export async function getMedianSalary(
+  filters?: { location?: string; experience?: string[]; minSalary?: number; q?: string }
+) {
   const conditions = [];
 
-  // Exclude $0 and null salaries from average
-  conditions.push(sql`${postings.yearly_min_salary} IS NOT NULL AND ${postings.yearly_min_salary} > 0`);
+  conditions.push(sql`${postings.yearly_min_salary} IS NOT NULL`);
+  conditions.push(
+    sql`${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}`
+  );
+  conditions.push(
+    sql`(
+      ${postings.yearly_max_salary} IS NULL
+      OR (
+        ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+        AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+      )
+    )`
+  );
 
   if (filters?.location) {
     conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
@@ -1260,7 +1511,7 @@ export async function getAverageSalary(
 
   const query = db
     .select({
-      avg_salary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`,
+      median_salary: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`LOWER(${postings.title}) = LOWER(${roleAliases.alias})`);
@@ -1270,7 +1521,7 @@ export async function getAverageSalary(
   }
 
   const result = await query;
-  return Number(result[0]?.avg_salary || 0);
+  return Number(result[0]?.median_salary || 0);
 }
 
 export async function getTopLocation(
@@ -1540,12 +1791,21 @@ export async function getTotalStats() {
   const result = await db.execute<{
     total_jobs: number;
     avg_salary: number;
+    median_salary: number;
+    salary_sample_size: number;
     total_companies: number;
     total_skills: number;
   }>(sql`
-    SELECT 
+    WITH salary_data AS (
+      SELECT p.yearly_min_salary
+      FROM "postings" p
+      WHERE ${validAnnualSalaryFilter("p")}
+    )
+    SELECT
       (SELECT COUNT(*)::int FROM "postings") as total_jobs,
-      (SELECT ROUND(AVG(yearly_min_salary))::int FROM "postings" WHERE yearly_min_salary IS NOT NULL AND yearly_min_salary > 0) as avg_salary,
+      (SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY yearly_min_salary))::int FROM salary_data) as median_salary,
+      (SELECT COUNT(*)::int FROM salary_data) as salary_sample_size,
+      (SELECT ROUND(AVG(yearly_min_salary))::int FROM salary_data) as avg_salary,
       (SELECT COUNT(DISTINCT company_id)::int FROM "companies") as total_companies,
       (SELECT COUNT(*)::int FROM "skills") as total_skills
   `);
@@ -1574,7 +1834,9 @@ export async function getTotalStats() {
 
   return {
     totalJobs: Number(stats?.total_jobs ?? 0) || 0,
-    avgSalary: Number(stats?.avg_salary ?? 0) || 0,
+    medianSalary: Number(stats?.median_salary ?? 0) || 0,
+    avgSalary: Number(stats?.median_salary ?? stats?.avg_salary ?? 0) || 0,
+    salarySampleSize: Number(stats?.salary_sample_size ?? 0) || 0,
     totalCompanies: Number(stats?.total_companies ?? 0) || 0,
     totalSkills: Number(stats?.total_skills ?? 0) || 0,
     monthlyGrowth: Number.isFinite(monthlyGrowth) ? monthlyGrowth : 0,
@@ -1599,6 +1861,7 @@ export async function getTopHiringCompanies(limit = 6) {
   const result = await db.execute<{
     company_name: string;
     open_positions: number;
+    median_salary: number;
     avg_salary: number;
     top_skills: string;
   }>(sql`
@@ -1606,9 +1869,10 @@ export async function getTopHiringCompanies(limit = 6) {
       SELECT 
         p.company_name,
         COUNT(DISTINCT p.job_id)::int as open_positions,
-        ROUND(AVG(p.yearly_min_salary) FILTER (WHERE p.yearly_min_salary > 0))::int as avg_salary
+        ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p.yearly_min_salary))::int as median_salary
       FROM ${postings} p
       WHERE p.company_name IS NOT NULL
+        AND ${validAnnualSalaryFilter("p")}
       GROUP BY p.company_name
       ORDER BY open_positions DESC
       LIMIT ${limit}
@@ -1628,17 +1892,19 @@ export async function getTopHiringCompanies(limit = 6) {
     SELECT 
       cs.company_name,
       cs.open_positions,
-      cs.avg_salary,
+      cs.median_salary,
+      cs.median_salary as avg_salary,
       STRING_AGG(csk.skill_name, '|' ORDER BY csk.skill_count DESC) FILTER (WHERE csk.rn <= 3) as top_skills
     FROM company_stats cs
     LEFT JOIN company_skills csk ON cs.company_name = csk.company_name AND csk.rn <= 3
-    GROUP BY cs.company_name, cs.open_positions, cs.avg_salary
+    GROUP BY cs.company_name, cs.open_positions, cs.median_salary
     ORDER BY cs.open_positions DESC
   `);
 
   return result.rows.map(row => ({
     company_name: row.company_name,
     open_positions: Number(row.open_positions),
+    median_salary: Number(row.median_salary),
     avg_salary: Number(row.avg_salary),
     top_skills: row.top_skills ? row.top_skills.split('|') : [],
   }));
@@ -1660,30 +1926,28 @@ export async function getSalaryInsights() {
         p.yearly_min_salary as salary
       FROM ${postings} p
       LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
-      WHERE p.yearly_min_salary IS NOT NULL 
-        AND p.yearly_min_salary > 10000 
-        AND p.yearly_min_salary < 1000000
+      WHERE ${validAnnualSalaryFilter("p")}
     ),
     highest AS (
-      SELECT role, AVG(salary)::int as avg_salary
+      SELECT role, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary)::int as median_salary
       FROM salary_data
       GROUP BY role
-      ORDER BY avg_salary DESC
+      ORDER BY median_salary DESC
       LIMIT 1
     ),
     lowest AS (
-      SELECT role, AVG(salary)::int as avg_salary
+      SELECT role, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary)::int as median_salary
       FROM salary_data
       GROUP BY role
       HAVING COUNT(*) > 10
-      ORDER BY avg_salary ASC
+      ORDER BY median_salary ASC
       LIMIT 1
     )
     SELECT 
       (SELECT role FROM highest) as highest_role,
-      (SELECT avg_salary FROM highest) as highest_salary,
+      (SELECT median_salary FROM highest) as highest_salary,
       (SELECT role FROM lowest) as lowest_role,
-      (SELECT avg_salary FROM lowest) as lowest_salary,
+      (SELECT median_salary FROM lowest) as lowest_salary,
       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary)::int as median_salary,
       MIN(salary)::int as min_salary,
       MAX(salary)::int as max_salary
@@ -1761,7 +2025,38 @@ export async function getSkillsWithFilters(params: {
     .select({
       name: skills.skill_name,
       count: sql<number>`count(${job_skills.job_id})::int`,
-      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0)::float`,
+      median_salary: sql<number>`coalesce(
+        percentile_cont(0.5) within group (
+          order by case
+            when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+              and (
+                ${postings.yearly_max_salary} is null
+                or (
+                  ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                  and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                )
+              )
+            then ${postings.yearly_min_salary}
+          end
+        ),
+        0
+      )::float`,
+      avg_salary: sql<number>`coalesce(
+        percentile_cont(0.5) within group (
+          order by case
+            when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+              and (
+                ${postings.yearly_max_salary} is null
+                or (
+                  ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                  and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                )
+              )
+            then ${postings.yearly_min_salary}
+          end
+        ),
+        0
+      )::float`,
     })
     .from(skills)
     .leftJoin(job_skills, eq(skills.skill_abr, job_skills.skill_abr))
@@ -1778,15 +2073,51 @@ export async function getSkillsWithFilters(params: {
     and(
       sql`count(${job_skills.job_id}) >= ${demandMin}`,
       sql`count(${job_skills.job_id}) <= ${demandMax}`,
-      sql`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0) >= ${salaryMin}`,
-      sql`coalesce(avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0), 0) <= ${salaryMax}`
+      sql`coalesce(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ), 0) >= ${salaryMin}`,
+      sql`coalesce(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ), 0) <= ${salaryMax}`
     )
   ) as any;
 
   // Apply sorting
   switch (sort) {
     case "salary":
-      query = query.orderBy(desc(sql`coalesce(avg(${postings.yearly_min_salary}), 0)`)) as any;
+      query = query.orderBy(desc(sql`coalesce(percentile_cont(0.5) within group (
+        order by case
+          when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+            and (
+              ${postings.yearly_max_salary} is null
+              or (
+                ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+              )
+            )
+          then ${postings.yearly_min_salary}
+        end
+      ), 0)`)) as any;
       break;
     case "name":
       query = query.orderBy(skills.skill_name) as any;
@@ -2058,13 +2389,27 @@ const avgDemandValue = avgDemandData[0]?.unique_skills
   ? Math.round(avgDemandData[0].total_jobs / avgDemandData[0].unique_skills)
   : 0;
 
-  // Average salary across all skills (excluding $0 salaries)
-  const avgSalary = await db
+  // Median salary across all skills using quality-filtered annual rows
+  const medianSalary = await db
     .select({
-      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+      median_salary: sql<number>`coalesce(
+        percentile_cont(0.5) within group (
+          order by case
+            when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+              and (
+                ${postings.yearly_max_salary} is null
+                or (
+                  ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                  and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                )
+              )
+            then ${postings.yearly_min_salary}
+          end
+        ),
+        0
+      )::float`,
     })
-    .from(postings)
-    .where(and(isNotNull(postings.yearly_min_salary), gt(postings.yearly_min_salary, 0)));
+    .from(postings);
 
   // Most in-demand skill
   const topSkill = await db
@@ -2100,14 +2445,33 @@ const avgDemandValue = avgDemandData[0]?.unique_skills
   const highestPaid = await db
     .select({
       name: skills.skill_name,
-      avg_salary: sql<number>`coalesce(avg(${postings.yearly_min_salary}), 0)::float`,
+      median_salary: sql<number>`coalesce(
+        percentile_cont(0.5) within group (
+          order by case
+            when ${postings.yearly_min_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+              and (
+                ${postings.yearly_max_salary} is null
+                or (
+                  ${postings.yearly_max_salary} between ${VALID_ANNUAL_SALARY_MIN} and ${VALID_ANNUAL_SALARY_MAX}
+                  and ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                )
+              )
+            then ${postings.yearly_min_salary}
+          end
+        ),
+        0
+      )::float`,
     })
     .from(job_skills)
     .innerJoin(skills, eq(job_skills.skill_abr, skills.skill_abr))
     .innerJoin(postings, eq(job_skills.job_id, postings.job_id))
-    .where(isNotNull(postings.yearly_min_salary))
+    .where(and(
+      isNotNull(postings.yearly_min_salary),
+      gte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MIN),
+      lte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MAX),
+    ))
     .groupBy(skills.skill_name)
-    .orderBy(desc(sql`coalesce(avg(${postings.yearly_min_salary}), 0)`))
+    .orderBy(desc(sql`coalesce(percentile_cont(0.5) within group (order by ${postings.yearly_min_salary}), 0)`))
     .limit(1);
 
   // Most versatile skill (appears in most diverse roles)
@@ -2126,14 +2490,15 @@ const avgDemandValue = avgDemandData[0]?.unique_skills
   return {
     totalSkills: Number(totalSkills[0]?.count || 0),
     avgDemand: avgDemandValue,
-    avgSalary: Math.round(Number(avgSalary[0]?.avg_salary || 0)),
+    medianSalary: Math.round(Number(medianSalary[0]?.median_salary || 0)),
+    avgSalary: Math.round(Number(medianSalary[0]?.median_salary || 0)),
     topSkill: topSkill[0]?.name || 'N/A',
     topSkillCount: topSkill[0]?.count || 0,
     newSkills: Number(newSkills[0]?.count || 0),
     fastestGrowingSkill: fastestGrowing?.skill_name || 'N/A',
     fastestGrowthRate: fastestGrowing?.growth_percentage || 0,
     highestPaidSkill: highestPaid[0]?.name || 'N/A',
-    highestPaidSalary: Math.round(Number(highestPaid[0]?.avg_salary || 0)),
+    highestPaidSalary: Math.round(Number(highestPaid[0]?.median_salary || 0)),
     mostVersatileSkill: mostVersatile[0]?.name || 'N/A',
     mostVersatileRoleCount: mostVersatile[0]?.role_count || 0,
   };
@@ -2198,20 +2563,21 @@ export async function getCompaniesHeroStats() {
   const highestPaying = await db
     .select({
       name: companies.name,
-      avg_salary: sql<number>`round(percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary}))::int`,
+      median_salary: sql<number>`round(percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary}))::int`,
+      avg_salary: sql<number>`round(percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary}))::int`,
     })
     .from(companies)
     .innerJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .where(
       and(
-        isNotNull(postings.yearly_max_salary),
-        gt(postings.yearly_max_salary, 10000),
-        lt(postings.yearly_max_salary, 1500000)
+        isNotNull(postings.yearly_min_salary),
+        gte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MIN),
+        lte(postings.yearly_min_salary, VALID_ANNUAL_SALARY_MAX)
       )
     )
     .groupBy(companies.company_id, companies.name)
     .having(sql`COUNT(${postings.job_id}) >= 5`)
-    .orderBy(desc(sql`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_max_salary})`))
+    .orderBy(desc(sql`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`))
     .limit(1);
 
   console.log('🔍 Hero Stats - Highest Paying:', highestPaying[0]);
@@ -2236,7 +2602,7 @@ export async function getCompaniesHeroStats() {
     totalCompanies: totalCompanies[0]?.count || 0,
     avgPostings: avgPostingsValue,
     highestPayingCompany: highestPaying[0]?.name || 'N/A',
-    highestPayingSalary: highestPaying[0]?.avg_salary || 0,
+    highestPayingSalary: highestPaying[0]?.median_salary || highestPaying[0]?.avg_salary || 0,
     mostActiveIndustry: topIndustry[0]?.industry || 'N/A',
     mostActiveIndustryCount: topIndustry[0]?.count || 0,
   };
@@ -2258,12 +2624,20 @@ export async function getCompanyComparisonData(companyIds: string[]) {
       location: sql<string>`CONCAT_WS(', ', ${companies.city}, ${companies.state}, ${companies.country})`,
       company_size: companies.company_size,
       posting_count: sql<number>`count(${postings.job_id})::int`,
-      // FIXED: Using company_name JOIN with yearly_max_salary median and sanity filters
+      median_salary: sql<number>`round(
+        percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY CASE 
+            WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            THEN ${postings.yearly_min_salary}
+            ELSE NULL 
+          END
+        )
+      )::int`,
       avg_salary: sql<number>`round(
         percentile_cont(0.5) WITHIN GROUP (
           ORDER BY CASE 
-            WHEN ${postings.yearly_max_salary} > 10000 AND ${postings.yearly_max_salary} < 1500000 
-            THEN ${postings.yearly_max_salary} 
+            WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+            THEN ${postings.yearly_min_salary} 
             ELSE NULL 
           END
         )
@@ -2287,6 +2661,7 @@ export async function getCompanyComparisonData(companyIds: string[]) {
 export async function getRolesSalaryBenchmark(limit = 15) {
   const result = await db.execute<{
     title: string;
+    median_salary: number;
     avg_salary: number;
     posting_count: number;
     salary_coverage: number;
@@ -2302,29 +2677,29 @@ export async function getRolesSalaryBenchmark(limit = 15) {
     role_salary AS (
       SELECT
         COALESCE(ra.canonical_name, p.title) AS title,
-        ROUND(AVG(p.yearly_min_salary))::int AS avg_salary,
+        ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p.yearly_min_salary))::int AS median_salary,
         COUNT(*)::int AS salary_count
       FROM ${postings} p
       LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
-      WHERE p.yearly_min_salary IS NOT NULL
-        AND p.yearly_min_salary > 10000
-        AND p.yearly_min_salary < 1000000
+      WHERE ${validAnnualSalaryFilter("p")}
       GROUP BY COALESCE(ra.canonical_name, p.title)
       HAVING COUNT(*) >= 10
     )
     SELECT
       rs.title,
-      rs.avg_salary,
+      rs.median_salary,
+      rs.median_salary AS avg_salary,
       rt.total_count AS posting_count,
       ROUND(rs.salary_count::numeric / rt.total_count * 100)::int AS salary_coverage
     FROM role_salary rs
     JOIN role_totals rt ON rs.title = rt.title
-    ORDER BY rs.avg_salary DESC
+    ORDER BY rs.median_salary DESC
     LIMIT ${limit}
   `);
 
   return result.rows.map(row => ({
     title: row.title,
+    median_salary: Number(row.median_salary),
     avg_salary: Number(row.avg_salary),
     posting_count: Number(row.posting_count),
     salary_coverage: Number(row.salary_coverage),

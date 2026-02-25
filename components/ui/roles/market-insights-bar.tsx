@@ -70,7 +70,7 @@ export function MarketInsightsBar({
         <InsightItem
           icon={<DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
           label="Highest Paying"
-          headline={highestSalary > 0 ? `$${Math.round(highestSalary / 1000)}k avg` : "N/A"}
+          headline={highestSalary > 0 ? `$${Math.round(highestSalary / 1000)}k median` : "N/A"}
           subtext={highestPayingRole || "—"}
           href={highestSlug ? `/roles/${highestSlug}` : undefined}
           accentClass="bg-emerald-500/10"

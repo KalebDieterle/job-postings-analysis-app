@@ -63,7 +63,7 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
             </p>
             {data.avgSalary && (
               <p className="text-sm text-muted-foreground">
-                Avg Salary:{" "}
+                Median Salary:{" "}
                 <span className="font-semibold text-green-500">
                   ${(data.avgSalary / 1000).toFixed(0)}k
                 </span>

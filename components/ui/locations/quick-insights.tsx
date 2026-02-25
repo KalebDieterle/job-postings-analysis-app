@@ -142,7 +142,7 @@ export function QuickInsights({
             </div>
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Market Average
+                Market Median
               </p>
               <p className="text-3xl font-black bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
                 ${(marketAverage.avgSalary / 1000).toFixed(0)}k

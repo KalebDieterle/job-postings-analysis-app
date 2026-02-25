@@ -162,7 +162,7 @@ export default function LocationHeatMap({ data }: { data: LocationData[] }) {
                       </p>
                       {location.avgSalary && (
                         <p>
-                          <span className="font-semibold">Avg Salary:</span> $
+                          <span className="font-semibold">Median Salary:</span> $
                           {Math.round(location.avgSalary).toLocaleString()}
                         </p>
                       )}

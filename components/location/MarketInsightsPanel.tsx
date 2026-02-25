@@ -30,10 +30,10 @@ export function MarketInsightsPanel({
   const [openSections, setOpenSections] = useState<string[]>(["trends"]);
   const remotePercentage = calculateRemotePercentage(recentJobs);
   const topSkill = topSkills[0]?.skillName || "N/A";
-  const avgSalary = Number(stats.avgMedSalary || 0);
+  const medianSalary = Number(stats.avgMedSalary || 0);
   const nationalAvg = 75000; // Placeholder for comparison
   const salaryDiff =
-    avgSalary > 0 ? ((avgSalary - nationalAvg) / nationalAvg) * 100 : 0;
+    medianSalary > 0 ? ((medianSalary - nationalAvg) / nationalAvg) * 100 : 0;
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) =>
@@ -84,7 +84,7 @@ export function MarketInsightsPanel({
               </p>
               {salaryDiff > 0 && (
                 <p className="text-muted-foreground">
-                  • Average salary{" "}
+                  • Median salary{" "}
                   <span className="font-medium text-green-600">
                     {salaryDiff.toFixed(1)}% above
                   </span>{" "}
@@ -158,11 +158,11 @@ export function MarketInsightsPanel({
                   {Number(stats.totalCompanies).toLocaleString()}
                 </span>
               </p>
-              {avgSalary > 0 && (
+              {medianSalary > 0 && (
                 <p className="flex items-center justify-between">
                   <span className="text-muted-foreground">Median Salary:</span>
                   <span className="font-medium text-green-600">
-                    {formatSalary(avgSalary)}
+                    {formatSalary(medianSalary)}
                   </span>
                 </p>
               )}

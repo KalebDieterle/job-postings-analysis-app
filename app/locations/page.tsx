@@ -198,7 +198,7 @@ function deduplicateLocations(locations: any[]): any[] {
       const newJobs = Number(location.jobCount) || 0;
       existing.jobCount = existingJobs + newJobs;
 
-      // Weighted average for salary based on job counts
+      // Weighted median proxy based on job counts (for merged duplicate records)
       const existingSalary = Number(existing.avgSalary) || 0;
       const newSalary = Number(location.avgSalary) || 0;
 
@@ -562,7 +562,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
                                     <TrendingUp className="w-4 h-4 text-muted-foreground" />
                                     <div>
                                       <p className="text-xs text-muted-foreground">
-                                        Avg Salary
+                                        Median Salary
                                       </p>
                                       <p className="font-semibold">
                                         $

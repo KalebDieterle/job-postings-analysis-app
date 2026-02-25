@@ -79,7 +79,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
     return {
       name: skill.name,
       demand: Number(skill.count),
-      salary: Number(skill.avg_salary),
+      salary: Number(skill.median_salary ?? skill.avg_salary),
       growth: growth?.growth_percentage,
       category: categorizeSkill(skill.name),
     };
@@ -146,7 +146,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
                   <SkillCard
                     name={skill.name}
                     count={Number(skill.count)}
-                    avgSalary={Number(skill.avg_salary)}
+                    medianSalary={Number(skill.median_salary ?? skill.avg_salary)}
                     category={categorizeSkill(skill.name)}
                   />
                 </Link>
@@ -161,7 +161,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
                 return {
                   name: skill.name,
                   count: Number(skill.count),
-                  avg_salary: Number(skill.avg_salary),
+                  median_salary: Number(skill.median_salary ?? skill.avg_salary),
                   growth: growth?.growth_percentage,
                 };
               })}
@@ -243,7 +243,7 @@ export default async function SkillsPage({
   const exportData = skillsData.map((skill) => ({
     name: skill.name,
     count: Number(skill.count),
-    avg_salary: Number(skill.avg_salary),
+    median_salary: Number(skill.median_salary ?? skill.avg_salary),
     category: categorizeSkill(skill.name),
   }));
 

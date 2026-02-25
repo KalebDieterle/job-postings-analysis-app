@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
     const trendingData = trendingRaw.map((row: any) => ({
         name: row.name, // Matches the key name defined in our Step 1 query
         count: Number(row.count),
-        avgSalary: Number(row.avgSalary),
+        medianSalary: Number(row.median_salary ?? row.medianSalary ?? row.avg_salary ?? row.avgSalary ?? 0),
+        avgSalary: Number(row.median_salary ?? row.medianSalary ?? row.avg_salary ?? row.avgSalary ?? 0),
     }));
 
     return NextResponse.json(trendingData);

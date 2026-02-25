@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { postings, companies, job_skills, job_industries, industries } from '@/db/schema';
 import type { AdzunaJob } from './adzuna/types';
 import { matchSkills } from './adzuna/utils';
+import { normalizeAnnualSalary } from './salary-normalization';
 
 /**
  * Rate limiter class to respect Adzuna API limits:
@@ -181,10 +182,25 @@ export function transformAdzunaJob(job: AdzunaJob, country: string = 'US'): {
   // Generate company ID (name-only, no location)
   const companyId = generateCompanyId(companyName);
   
-  // Adzuna salaries are typically annual, but we'll store them as-is
+  // Adzuna salaries are typically annual.
   const minSalary = job.salary_min ?? null;
   const maxSalary = job.salary_max ?? null;
-  const medSalary = minSalary && maxSalary ? Math.round((minSalary + maxSalary) / 2) : null;
+  const normalizedSalary = normalizeAnnualSalary(minSalary, maxSalary, 'YEARLY', 'adzuna');
+
+  if (normalizedSalary.rejected) {
+    console.warn(
+      '[salary_rejected]',
+      JSON.stringify({
+        source: 'adzuna',
+        external_id: job.id,
+        job_id: `adzuna_${job.id}`,
+        reason: normalizedSalary.rejectionReason,
+        min_salary: minSalary,
+        max_salary: maxSalary,
+        pay_period: 'YEARLY',
+      })
+    );
+  }
   
   // Generate a unique job_id from external_id and source
   const jobId = `adzuna_${job.id}`;
@@ -202,10 +218,10 @@ export function transformAdzunaJob(job: AdzunaJob, country: string = 'US'): {
     location: job.location.display_name,
     min_salary: minSalary,
     max_salary: maxSalary,
-    yearly_min_salary: minSalary, // Assuming annual
-    yearly_max_salary: maxSalary,
-    med_salary: medSalary,
-    yearly_med_salary: medSalary,
+    yearly_min_salary: normalizedSalary.minAnnual,
+    yearly_max_salary: normalizedSalary.maxAnnual,
+    med_salary: normalizedSalary.medAnnual,
+    yearly_med_salary: normalizedSalary.medAnnual,
     pay_period: 'YEARLY',
     currency: 'USD',
     compensation_type: 'salary',

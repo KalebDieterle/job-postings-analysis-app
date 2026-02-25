@@ -58,8 +58,8 @@ export default async function SkillDetailPage({
           description="Across all companies"
         />
         <StatCard
-          title="Avg. Min Salary"
-          value={`$${Math.round(details.avgSalary / 1000)}k`}
+          title="Median Salary"
+          value={`$${Math.round((details.medianSalary ?? details.avgSalary) / 1000)}k`}
           icon={DollarSign}
           description="Per year"
         />

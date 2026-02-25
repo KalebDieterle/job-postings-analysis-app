@@ -4,11 +4,19 @@ import * as React from "react";
 import { useQueryStates } from "nuqs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import {
-  skillsSearchParamsParser,
-  QUICK_FILTERS,
-} from "@/lib/skills-search-params";
+import { skillsSearchParamsParser } from "@/lib/skills-search-params";
 import { useTransition } from "react";
+import {
+  BarChart3,
+  Cloud,
+  DollarSign,
+  Flame,
+  Laptop,
+  Rocket,
+  Shield,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 
 interface QuickFilterCounts {
   trending: number;
@@ -22,7 +30,7 @@ interface QuickFilterCounts {
 }
 
 export function SmartQuickFilters() {
-  const [searchParams, setSearchParams] = useQueryStates(
+  const [, setSearchParams] = useQueryStates(
     skillsSearchParamsParser,
     {
       shallow: false,
@@ -98,53 +106,75 @@ export function SmartQuickFilters() {
   const quickFilterButtons = [
     {
       key: "trending",
-      label: QUICK_FILTERS.trending.label,
+      label: "Trending Now",
       count: counts.trending,
       gradient: "from-orange-500 to-red-500",
+      icon: Flame,
     },
     {
       key: "highPaying",
-      label: QUICK_FILTERS.highPaying.label,
+      label: "High Paying",
       count: counts.highPaying,
       gradient: "from-green-500 to-emerald-500",
+      icon: DollarSign,
     },
     {
       key: "highDemand",
-      label: QUICK_FILTERS.highDemand.label,
+      label: "In High Demand",
       count: counts.highDemand,
       gradient: "from-blue-500 to-cyan-500",
+      icon: Rocket,
     },
     {
       key: "emerging",
-      label: QUICK_FILTERS.emerging.label,
+      label: "Emerging Tech",
       count: counts.emerging,
       gradient: "from-purple-500 to-pink-500",
+      icon: Sparkles,
     },
     {
       key: "cloudDevOps",
-      label: QUICK_FILTERS.cloudDevOps.label,
+      label: "Cloud & DevOps",
       count: counts.cloudDevOps,
       gradient: "from-sky-500 to-blue-500",
+      icon: Cloud,
     },
     {
       key: "fullStack",
-      label: QUICK_FILTERS.fullStack.label,
+      label: "Full Stack",
       count: counts.fullStack,
       gradient: "from-indigo-500 to-purple-500",
+      icon: Laptop,
     },
     {
       key: "dataAnalytics",
-      label: QUICK_FILTERS.dataAnalytics.label,
+      label: "Data & Analytics",
       count: counts.dataAnalytics,
       gradient: "from-teal-500 to-cyan-500",
+      icon: BarChart3,
     },
     {
       key: "security",
-      label: QUICK_FILTERS.security.label,
+      label: "Security",
       count: counts.security,
       gradient: "from-red-500 to-rose-500",
+      icon: Shield,
     },
-  ];
+  ] satisfies Array<{
+    key:
+      | "trending"
+      | "highPaying"
+      | "highDemand"
+      | "emerging"
+      | "cloudDevOps"
+      | "fullStack"
+      | "dataAnalytics"
+      | "security";
+    label: string;
+    count: number;
+    gradient: string;
+    icon: LucideIcon;
+  }>;
 
   return (
     <div className="space-y-3">
@@ -152,7 +182,9 @@ export function SmartQuickFilters() {
         Quick Filters
       </h4>
       <div className="flex flex-wrap gap-2">
-        {quickFilterButtons.map((filter) => (
+        {quickFilterButtons.map((filter) => {
+          const Icon = filter.icon;
+          return (
           <button
             key={filter.key}
             onClick={() => handleQuickFilter(filter.key)}
@@ -167,6 +199,7 @@ export function SmartQuickFilters() {
               activeFilter === filter.key && filter.gradient,
             )}
           >
+            <Icon className="h-4 w-4" aria-hidden="true" />
             <span>{filter.label}</span>
             <Badge
               variant={activeFilter === filter.key ? "secondary" : "outline"}
@@ -180,7 +213,8 @@ export function SmartQuickFilters() {
               {filter.count}
             </Badge>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
