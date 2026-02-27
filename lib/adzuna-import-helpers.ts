@@ -371,54 +371,36 @@ export async function jobExists(
 export async function batchInsertJobs(
   jobs: Awaited<ReturnType<typeof transformAdzunaJob>>[]
 ): Promise<{ inserted: number; updated: number; failed: number }> {
-  let inserted = 0;
-  let updated = 0;
-  let failed = 0;
+  if (jobs.length === 0) return { inserted: 0, updated: 0, failed: 0 };
 
-  for (const job of jobs) {
-    try {
-      const exists = await jobExists(job.external_id, job.source, job.country);
-      
-      if (exists) {
-        // Update existing job
-        await db
-          .update(postings)
-          .set({
-            title: job.title,
-            description: job.description,
-            min_salary: job.min_salary,
-            max_salary: job.max_salary,
-            yearly_min_salary: job.yearly_min_salary,
-            yearly_max_salary: job.yearly_max_salary,
-            med_salary: job.med_salary,
-            yearly_med_salary: job.yearly_med_salary,
-            location: job.location,
-            work_type: job.work_type,
-            formatted_work_type: job.formatted_work_type,
-            remote_allowed: job.remote_allowed,
-            country: job.country, // Update country field
-            import_timestamp: new Date(),
-          })
-          .where(
-            and(
-              eq(postings.external_id, job.external_id),
-              eq(postings.source, job.source),
-              eq(postings.country, job.country)
-            )
-          );
-        updated++;
-      } else {
-        // Insert new job
-        await db.insert(postings).values(job);
-        inserted++;
-      }
-    } catch (error: any) {
-      console.error(`❌ Failed to insert job ${job.external_id}:`, error.message);
-      failed++;
-    }
+  try {
+    await db
+      .insert(postings)
+      .values(jobs)
+      .onConflictDoUpdate({
+        target: [postings.external_id, postings.source, postings.country],
+        set: {
+          title: sql`excluded.title`,
+          description: sql`excluded.description`,
+          min_salary: sql`excluded.min_salary`,
+          max_salary: sql`excluded.max_salary`,
+          yearly_min_salary: sql`excluded.yearly_min_salary`,
+          yearly_max_salary: sql`excluded.yearly_max_salary`,
+          med_salary: sql`excluded.med_salary`,
+          yearly_med_salary: sql`excluded.yearly_med_salary`,
+          location: sql`excluded.location`,
+          work_type: sql`excluded.work_type`,
+          formatted_work_type: sql`excluded.formatted_work_type`,
+          remote_allowed: sql`excluded.remote_allowed`,
+          country: sql`excluded.country`,
+          import_timestamp: sql`excluded.import_timestamp`,
+        },
+      });
+    return { inserted: jobs.length, updated: 0, failed: 0 };
+  } catch (error: any) {
+    console.error(`❌ Batch upsert failed:`, error.message);
+    return { inserted: 0, updated: 0, failed: jobs.length };
   }
-
-  return { inserted, updated, failed };
 }
 
 /**
