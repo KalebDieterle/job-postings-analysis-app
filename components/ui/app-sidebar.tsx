@@ -4,6 +4,7 @@ import {
   BarChart3,
   Briefcase,
   Building2,
+  DollarSign,
   Home,
   Sparkles,
   MapPin,
@@ -60,6 +61,14 @@ const navigationItems = [
   },
 ];
 
+const intelligenceItems = [
+  {
+    title: "Salary Predictor",
+    url: "/intelligence/salary-predictor",
+    icon: DollarSign,
+  },
+];
+
 export function AppSidebar() {
   const pathname = usePathname();
 
@@ -92,6 +101,41 @@ export function AppSidebar() {
                   item.url === "/"
                     ? pathname === "/"
                     : pathname === item.url || pathname.startsWith(`${item.url}/`);
+
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <span
+                      className={`absolute inset-y-1 left-0 w-1 rounded-r-full bg-sidebar-primary transition-all duration-300 ${
+                        isActive
+                          ? "opacity-100 scale-y-100"
+                          : "opacity-0 scale-y-75"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      className="transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
+                    >
+                      <Link href={item.url}>
+                        <item.icon className="transition-transform duration-300 group-hover/menu-item:scale-110" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Intelligence</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {intelligenceItems.map((item) => {
+                const isActive =
+                  pathname === item.url || pathname.startsWith(`${item.url}/`);
 
                 return (
                   <SidebarMenuItem key={item.title}>

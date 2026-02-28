@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "mcp__neon__list_projects",
-      "mcp__neon__run_sql"
+      "mcp__neon__run_sql",
+      "Bash(npx next:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python:*)",
+      "Bash(uv:*)",
+      "Bash(py:*)",
+      "Bash(pip install:*)"
     ]
   }
 }
