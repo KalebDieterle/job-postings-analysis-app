@@ -114,6 +114,8 @@ Create a `.env.local` with at least:
 
 ```
 DATABASE_URL=postgres://user:pass@host:5432/dbname
+ML_SERVICE_URL=http://localhost:8000
+ML_SERVICE_KEY=local-ml-shared-key
 ```
 
 If using Neon or serverless Postgres, set the connection string accordingly.
@@ -159,6 +161,22 @@ The `db/migrations/` folder contains generated SQL migration files.
 - Build: `npm run build` then `npm run start` (Vercel will handle this for you).
 
 If you deploy to a platform other than Vercel, ensure Node 18+ and the same environment variables are available.
+
+### ML Deployment (Vercel + Fly)
+
+The ML features are served by a separate FastAPI service (`ml-service/`) and proxied through Next route handlers:
+- Deploy `ml-service/` to Fly (or equivalent)
+- Set `ML_SERVICE_URL` in Vercel to the ML service base URL
+- Set `ML_SERVICE_KEY` on both Vercel and Fly to the same shared secret
+
+Cost controls implemented in this repo:
+- Proxy-side soft rate limits on `/api/ml/*`
+- ML service hard rate limits per endpoint class + global
+- Optional heavy-inference kill switch
+- Manual-trigger ML widgets on role pages
+
+Operational guide:
+- `docs/ml-cost-control-runbook.md`
 
 ## Troubleshooting & common issues
 

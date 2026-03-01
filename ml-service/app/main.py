@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.middleware import ml_rate_limit_middleware, ml_service_auth_middleware
 
 # Global model registry loaded once at startup.
 model_registry: dict = {}
@@ -96,3 +97,5 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(salary.router, prefix="/api/v1")
 app.include_router(skill_gap.router, prefix="/api/v1")
 app.include_router(clustering.router, prefix="/api/v1")
+app.middleware("http")(ml_service_auth_middleware)
+app.middleware("http")(ml_rate_limit_middleware)

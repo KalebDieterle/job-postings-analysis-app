@@ -48,4 +48,5 @@ This file defines how coding agents should work in this repository.
 ## Notes
 
 - Repo already ignores local `config.toml` in `.gitignore`.
+- ML cost-control operations are documented in `docs/ml-cost-control-runbook.md`.
 - Keep this file updated when workflows or commands change.

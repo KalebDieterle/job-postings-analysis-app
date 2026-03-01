@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { DollarSign } from "lucide-react";
+import { useState } from "react";
+import { DollarSign, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface PredictionResult {
   predicted_salary: number;
@@ -16,9 +17,15 @@ function formatSalary(value: number) {
 
 export function RoleSalaryPreview({ roleTitle }: { roleTitle: string }) {
   const [result, setResult] = useState<PredictionResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetch("/api/ml/salary/predict", {
+  const loadInsight = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/ml/salary/predict", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -32,13 +39,47 @@ export function RoleSalaryPreview({ roleTitle }: { roleTitle: string }) {
         industries: [],
         employee_count: null,
       }),
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setResult)
-      .catch(() => {});
-  }, [roleTitle]);
+      });
 
-  if (!result) return null;
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(payload?.message || payload?.error || "Unable to load ML salary insight");
+      }
+
+      const payload = (await res.json()) as PredictionResult;
+      setResult(payload);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to load ML salary insight");
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!result) {
+    return (
+      <div className="rounded-xl border bg-card p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <DollarSign className="h-4 w-4 text-emerald-600" />
+          <h3 className="text-sm font-semibold">ML Predicted Salary Range</h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-3">
+          Load this model-powered estimate on demand to reduce compute usage.
+        </p>
+        {error ? <p className="text-sm text-destructive mb-3">{error}</p> : null}
+        <Button size="sm" onClick={loadInsight} disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Loading...
+            </>
+          ) : (
+            "Load ML Insight"
+          )}
+        </Button>
+      </div>
+    );
+  }
 
   const { lower_bound, upper_bound, predicted_salary } = result;
   const range = upper_bound - lower_bound;
@@ -59,6 +100,7 @@ export function RoleSalaryPreview({ roleTitle }: { roleTitle: string }) {
           {Math.round(result.confidence * 100)}% confidence
         </span>
       </div>
+      {error ? <p className="text-sm text-destructive mb-2">{error}</p> : null}
       <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
         <span>{formatSalary(lower_bound)}</span>
         <span className="font-semibold text-foreground">{formatSalary(predicted_salary)}</span>
@@ -73,6 +115,18 @@ export function RoleSalaryPreview({ roleTitle }: { roleTitle: string }) {
           className="absolute top-0 bottom-0 w-0.5 bg-emerald-700"
           style={{ left: `${predictedPct}%` }}
         />
+      </div>
+      <div className="mt-3">
+        <Button size="sm" variant="outline" onClick={loadInsight} disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Refreshing...
+            </>
+          ) : (
+            "Refresh Insight"
+          )}
+        </Button>
       </div>
     </div>
   );
