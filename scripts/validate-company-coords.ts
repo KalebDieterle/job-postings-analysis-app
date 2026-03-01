@@ -99,7 +99,7 @@ const NOMINATIM_DELAY_MS = 1100;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function normalizeCity(raw: string): string | null {
-  let city = raw
+  const city = raw
     .toLowerCase()
     .trim()
     .replace(/^\d+\s*/, '')

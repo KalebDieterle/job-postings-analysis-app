@@ -107,7 +107,7 @@ export function JobFilters({ onFilterChange, initialValues }: JobFiltersProps) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+            <div className="grid grid-cols-1 gap-4 rounded-lg bg-muted/50 p-4 md:grid-cols-2 lg:grid-cols-3">
               <div>
                 <label className="text-sm font-medium mb-2 block">
                   Work Mode

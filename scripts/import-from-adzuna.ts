@@ -197,7 +197,6 @@ async function importFromAdzuna() {
   let totalJobsInserted = 0;
   let totalJobsUpdated = 0;
   let totalJobsFailed = 0;
-  let totalCompaniesProcessed = 0;
   let totalSkillsInserted = 0;
   let totalIndustriesMapped = 0;
   let totalRequestsThisRun = 0;

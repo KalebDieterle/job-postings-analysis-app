@@ -7,6 +7,7 @@ interface CompanyCardProps {
   rank: number;
   country: string;
   size: string;
+  reserveTopRightSpace?: boolean;
 }
 
 export function CompanyCard({
@@ -15,17 +16,20 @@ export function CompanyCard({
   rank,
   country,
   size,
+  reserveTopRightSpace = false,
 }: CompanyCardProps) {
   return (
     <div className="p-5 rounded-xl border bg-card hover:bg-muted/50 transition-all hover:shadow-md flex flex-col h-full">
-      <div className="flex items-center justify-between mb-3">
+      <div
+        className={`mb-3 flex items-center justify-between ${reserveTopRightSpace ? "pr-10" : ""}`}
+      >
         {/* Rank Badge */}
         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-xs">
           #{rank}
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex max-w-full items-center gap-2 text-xs text-muted-foreground">
           <Building2 className="h-4 w-4" />
-          <span>{country}</span>
+          <span className="truncate">{country}</span>
         </div>
       </div>
       <div className="flex-1 flex flex-col justify-center items-start mb-4">

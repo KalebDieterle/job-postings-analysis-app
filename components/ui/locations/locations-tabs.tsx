@@ -16,18 +16,18 @@ export function LocationsTabs({
 }: LocationsTabsProps) {
   return (
     <Tabs defaultValue="dashboard" className="w-full">
-      <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
+      <TabsList className="mb-6 grid w-full grid-cols-3 md:mb-8 md:max-w-md md:mx-auto">
         <TabsTrigger value="dashboard" className="flex items-center gap-2">
           <LayoutDashboard className="w-4 h-4" />
-          <span className="hidden sm:inline">Dashboard</span>
+          <span className="text-[11px] md:text-sm">Dashboard</span>
         </TabsTrigger>
         <TabsTrigger value="browse" className="flex items-center gap-2">
           <Grid3x3 className="w-4 h-4" />
-          <span className="hidden sm:inline">Browse Cities</span>
+          <span className="text-[11px] md:text-sm">Browse</span>
         </TabsTrigger>
         <TabsTrigger value="map" className="flex items-center gap-2">
           <MapIcon className="w-4 h-4" />
-          <span className="hidden sm:inline">Map View</span>
+          <span className="text-[11px] md:text-sm">Map</span>
         </TabsTrigger>
       </TabsList>
 

@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/providers/theme-provider";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/ui/app-sidebar";
-import { ModeToggle } from "@/components/ui/mode-toggle";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "@/components/ui/toaster";
+import { MobileAppHeader } from "@/components/ui/mobile/mobile-app-header";
+import { MobileBottomNav } from "@/components/ui/mobile/mobile-bottom-nav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,20 +44,17 @@ export default function RootLayout({
           <NuqsAdapter>
             <SidebarProvider>
               <AppSidebar />
-              <main className="flex-1 overflow-auto w-full">
-                <div className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4">
-                  <SidebarTrigger />
-                  <h1 className="text-lg font-semibold">
-                    Job Market Analytics
-                  </h1>
-                  <div className="absolute right-4">
-                    <ModeToggle />
+              <main className="flex min-h-svh w-full flex-1 flex-col overflow-hidden">
+                <MobileAppHeader />
+                {/* The children (pages) will now be able to use
+                    useQueryStates and useQueryState hooks.
+                */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                  <div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-6">
+                    {children}
                   </div>
                 </div>
-                {/* The children (pages) will now be able to use 
-                   useQueryStates and useQueryState hooks.
-                */}
-                <div className="p-6">{children}</div>
+                <MobileBottomNav />
               </main>
             </SidebarProvider>
           </NuqsAdapter>

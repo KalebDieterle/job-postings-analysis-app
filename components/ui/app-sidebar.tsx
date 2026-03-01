@@ -2,17 +2,14 @@
 
 import {
   BarChart3,
-  Briefcase,
-  Building2,
-  DollarSign,
-  Home,
   Sparkles,
-  MapPin,
-  TrendingUp,
-  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  DRAWER_SECONDARY_ITEMS,
+  MOBILE_NAV_ITEMS,
+} from "@/lib/mobile-route-meta";
 
 import {
   Sidebar,
@@ -27,54 +24,12 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-// Menu items
-const navigationItems = [
-  {
-    title: "Overview",
-    url: "/",
-    icon: Home,
-  },
-  {
-    title: "Job Roles",
-    url: "/roles",
-    icon: Briefcase,
-  },
-  {
-    title: "Skills",
-    url: "/skills",
-    icon: Wrench,
-  },
-  {
-    title: "Companies",
-    url: "/companies",
-    icon: Building2,
-  },
-  {
-    title: "Locations",
-    url: "/locations",
-    icon: MapPin,
-  },
-  {
-    title: "Trends",
-    url: "/trends",
-    icon: TrendingUp,
-  },
-];
-
-const intelligenceItems = [
-  {
-    title: "Salary Predictor",
-    url: "/intelligence/salary-predictor",
-    icon: DollarSign,
-  },
-];
-
 export function AppSidebar() {
   const pathname = usePathname();
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border px-6 py-4 group-data-[collapsible=icon]:px-2">
+      <SidebarHeader className="border-b border-sidebar-border px-4 py-4 group-data-[collapsible=icon]:px-2">
         <Link href="/" className="group/brand flex items-center gap-3">
           <div className="relative grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-600 text-white shadow-lg ring-1 ring-white/20 transition-transform duration-300 group-hover/brand:scale-105 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
             <BarChart3 className="h-5 w-5 transition-transform duration-300 group-hover/brand:scale-110" />
@@ -93,17 +48,18 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Primary</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item) => {
+              {MOBILE_NAV_ITEMS.map((item) => {
                 const isActive =
-                  item.url === "/"
+                  item.href === "/"
                     ? pathname === "/"
-                    : pathname === item.url || pathname.startsWith(`${item.url}/`);
+                    : pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`);
 
                 return (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.href}>
                     <span
                       className={`absolute inset-y-1 left-0 w-1 rounded-r-full bg-sidebar-primary transition-all duration-300 ${
                         isActive
@@ -115,11 +71,11 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className="transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
+                      className="min-h-11 transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
                     >
-                      <Link href={item.url}>
+                      <Link href={item.href}>
                         <item.icon className="transition-transform duration-300 group-hover/menu-item:scale-110" />
-                        <span>{item.title}</span>
+                        <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -130,10 +86,10 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Intelligence</SidebarGroupLabel>
+          <SidebarGroupLabel>More</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {intelligenceItems.map((item) => {
+              {DRAWER_SECONDARY_ITEMS.map((item) => {
                 const isActive =
                   pathname === item.url || pathname.startsWith(`${item.url}/`);
 
@@ -150,7 +106,7 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className="transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
+                      className="min-h-11 transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
                     >
                       <Link href={item.url}>
                         <item.icon className="transition-transform duration-300 group-hover/menu-item:scale-110" />

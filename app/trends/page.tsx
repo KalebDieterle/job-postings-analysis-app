@@ -1,4 +1,5 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 import { getTrendingSkills, getTrendingStats } from "@/db/queries";
 import { TrendingSkillCard } from "@/components/ui/trending/trending-skill-card-v2";
@@ -19,6 +20,8 @@ import {
 } from "lucide-react";
 import { Suspense } from "react";
 import { categorizeSkill } from "@/lib/skill-helpers";
+import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -64,17 +67,18 @@ async function TrendingContent({
   searchParams: SearchParams;
 }) {
   const parsedParams = await searchParams;
-  const timeframe =
+  const rawTimeframe =
     typeof parsedParams.timeframe === "string"
-      ? parseInt(parsedParams.timeframe)
+      ? Number.parseInt(parsedParams.timeframe, 10)
       : 30;
+  const timeframe = [7, 30, 90].includes(rawTimeframe) ? rawTimeframe : 30;
   const sortBy =
-    typeof parsedParams.sortBy === "string"
-      ? (parsedParams.sortBy as "demand" | "salary")
+    parsedParams.sortBy === "salary" || parsedParams.sortBy === "demand"
+      ? parsedParams.sortBy
       : "demand";
 
   const [trendingSkillsRaw, stats] = await Promise.all([
-    getTrendingSkills(timeframe, 24),
+    getTrendingSkills(timeframe, 24, sortBy),
     getTrendingStats(timeframe),
   ]);
 
@@ -105,12 +109,11 @@ async function TrendingContent({
         <div className="flex items-start gap-3">
           <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
           <div className="space-y-1">
-            <p className="font-semibold">Snapshot Comparison</p>
+            <p className="font-semibold">Window Comparison</p>
             <p className="text-sm text-muted-foreground">
-              Trends show changes between <strong>April 2024</strong> (29.9k
-              jobs) and <strong>February 2026</strong> (2.1k jobs) data
-              snapshots. Growth percentages reflect demand shifts across this
-              timeframe.
+              Trends compare the most recent <strong>{timeframe}-day</strong>{" "}
+              window against the prior <strong>{timeframe}-day</strong> window,
+              anchored to the latest posting date in the dataset.
             </p>
           </div>
         </div>
@@ -177,7 +180,7 @@ async function TrendingContent({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {breakoutSkills.map((skill, index) => (
               <Link
                 key={skill.name}
@@ -217,7 +220,7 @@ async function TrendingContent({
         </div>
 
         {regularTrending.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {regularTrending.map((skill, index) => (
               <Link
                 key={skill.name}
@@ -292,7 +295,7 @@ function TrendingGridSkeleton() {
       <div className="skeleton-line h-16 rounded-xl" />
 
       {/* Grid skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {[...Array(12)].map((_, i) => (
           <div key={i} className="skeleton-card h-72" />
         ))}
@@ -307,22 +310,18 @@ export default async function TrendsPage({
   searchParams: SearchParams;
 }) {
   return (
-    <div className="container mx-auto p-6 lg:p-8 space-y-8">
+    <MobilePageShell>
       {/* Header */}
-      <header className="max-w-3xl space-y-3">
-        <h1 className="text-4xl lg:text-5xl font-black tracking-tight bg-linear-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
-          Market Momentum
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Spot emerging trends and salary spikes before they go mainstream.
-          Track the technologies shaping tomorrow's job market.
-        </p>
-      </header>
+      <MobilePageHeader
+        title="Market Momentum"
+        subtitle="Spot emerging trends and salary spikes before they go mainstream. Track the technologies shaping tomorrow&apos;s job market."
+        className="max-w-3xl"
+      />
 
       {/* Content with Suspense */}
       <Suspense fallback={<TrendingGridSkeleton />}>
         <TrendingContent searchParams={searchParams} />
       </Suspense>
-    </div>
+    </MobilePageShell>
   );
 }

@@ -1,4 +1,5 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 import { IndustryRadarChart } from "@/components/ui/charts/industry-radar-chart";
 import { CompanyOverview } from "@/components/ui/company-overview";
@@ -20,8 +21,10 @@ import {
 } from "@/db/queries";
 
 import { Suspense } from "react";
-import Link from "next/link";
 import { PaginationControls } from "@/components/ui/skills/pagination-controls";
+import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { MobileStickyActions } from "@/components/ui/mobile/mobile-sticky-actions";
 
 type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -106,20 +109,16 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-8 pb-16">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="max-w-2xl space-y-2">
-          <h1 className="text-4xl font-black tracking-tight lg:text-5xl">
-            Company Explorer
-          </h1>
-        </div>
-      </div>
+    <MobilePageShell className="pb-4 md:pb-10">
+      <MobilePageHeader title="Company Explorer" compact />
 
       {/* Hero Stats Dashboard */}
       <HeroStatsDashboard stats={heroStats} />
 
       {/* Company Filters */}
-      <CompaniesFilterBar />
+      <MobileStickyActions>
+        <CompaniesFilterBar />
+      </MobileStickyActions>
 
       <Suspense
         fallback={<div className="h-28 rounded-xl bg-muted animate-pulse" />}
@@ -179,7 +178,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
       {/* Pagination Controls */}
       {(hasNextPage || hasPrevPage) && (
-        <div className="flex flex-col sm:flex-row items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800 gap-4">
+        <div className="flex flex-col gap-4 border-t border-slate-200 py-6 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Showing{" "}
             <span className="font-bold text-slate-900 dark:text-white">
@@ -199,6 +198,6 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
           />
         </div>
       )}
-    </div>
+    </MobilePageShell>
   );
 }

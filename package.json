@@ -21,6 +21,7 @@
     "import-role-aliases": "tsx scripts/import-role-aliases.ts",
     "geocode": "tsx scripts/geocode-all-companies.ts",
     "test-adzuna": "tsx scripts/test-adzuna.ts",
+    "test:core-helpers": "tsx scripts/test-core-helpers.ts",
     "preview:adzuna": "tsx scripts/preview-adzuna-import.ts",
     "import:adzuna": "tsx scripts/import-from-adzuna.ts",
     "cleanup:companies": "tsx scripts/cleanup-duplicate-companies.ts",

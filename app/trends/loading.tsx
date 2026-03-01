@@ -1,36 +1,39 @@
+import { Skeleton } from "@/components/ui/skeleton";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+
 export default function TrendsLoading() {
   return (
-    <div className="container mx-auto p-6 space-y-8">
-      {/* Header skeleton */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="max-w-2xl space-y-3">
-          <div className="h-12 w-96 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse" />
-          <div className="h-6 w-full bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
+    <MobilePageShell>
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-56 md:h-10 md:w-72" />
+        <Skeleton className="h-4 w-full max-w-2xl" />
+      </div>
+
+      <Skeleton className="h-24 rounded-xl" />
+
+      <Skeleton className="h-4 w-44" />
+
+      <div className="bento-grid">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-32 rounded-xl" />
+        ))}
+      </div>
+
+      <Skeleton className="h-16 rounded-xl" />
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-6 w-28 rounded-full" />
+        </div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 12 }).map((_, index) => (
+            <Skeleton key={index} className="h-72 rounded-xl" />
+          ))}
         </div>
       </div>
 
-      {/* Stats skeleton */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <div
-            key={i}
-            className="h-32 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse"
-          />
-        ))}
-      </div>
-
-      {/* Filters skeleton */}
-      <div className="h-20 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
-
-      {/* Grid skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {[...Array(12)].map((_, i) => (
-          <div
-            key={i}
-            className="h-64 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse"
-          />
-        ))}
-      </div>
-    </div>
+      <Skeleton className="h-28 rounded-xl" />
+    </MobilePageShell>
   );
 }

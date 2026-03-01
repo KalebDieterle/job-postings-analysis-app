@@ -5,19 +5,10 @@ import {
   parseAsArrayOf,
   parseAsStringEnum,
 } from "nuqs/server";
+import { SKILL_CATEGORIES, type SkillCategory } from "@/lib/skill-categories";
 
-// Skill categories
-export const SKILL_CATEGORIES = [
-  "Programming Languages",
-  "Frameworks & Libraries",
-  "Databases & Data",
-  "DevOps & Cloud",
-  "Tools & Platforms",
-  "Soft Skills",
-  "AI/ML & Data Science",
-] as const;
-
-export type SkillCategory = (typeof SKILL_CATEGORIES)[number];
+export { SKILL_CATEGORIES };
+export type { SkillCategory };
 
 // Experience levels
 export const EXPERIENCE_LEVELS = [

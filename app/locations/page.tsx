@@ -1,12 +1,13 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
-import { getJobsByCity, getJobsByCountry } from "@/db/queries";
-import LocationsHeader from "@/components/ui/locations/locations-header";
+import { getJobsByCityFiltered, getJobsByCountry } from "@/db/queries";
 import StatsCards from "@/components/ui/locations/stats-card";
 import GlobalHeatMapCard from "@/components/ui/locations/global-heatmap-card";
 import { PaginationControls } from "@/components/ui/skills/pagination-controls";
 import { LocationsFilterBar } from "@/components/ui/filters/locations-filter-bar";
 import { locationsSearchParamsCache } from "@/lib/locations-search-params";
+import { generateLocationSlug } from "@/lib/location-utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { MapPin, Building2, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +17,9 @@ import { MarketScatterPlot } from "@/components/ui/locations/market-scatter-plot
 import { RegionalDistribution } from "@/components/ui/locations/regional-distribution";
 import { LocationsTabs } from "@/components/ui/locations/locations-tabs";
 import { CityOpportunityPanel } from "@/components/ui/locations/city-opportunity-panel";
+import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { MobileStickyActions } from "@/components/ui/mobile/mobile-sticky-actions";
 
 export const metadata = {
   title: "Job Locations - Global Distribution",
@@ -26,320 +30,80 @@ type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-// Map full state names to abbreviations
-const STATE_ABBREVIATIONS: Record<string, string> = {
-  alabama: "al",
-  alaska: "ak",
-  arizona: "az",
-  arkansas: "ar",
-  california: "ca",
-  colorado: "co",
-  connecticut: "ct",
-  delaware: "de",
-  florida: "fl",
-  georgia: "ga",
-  hawaii: "hi",
-  idaho: "id",
-  illinois: "il",
-  indiana: "in",
-  iowa: "ia",
-  kansas: "ks",
-  kentucky: "ky",
-  louisiana: "la",
-  maine: "me",
-  maryland: "md",
-  massachusetts: "ma",
-  michigan: "mi",
-  minnesota: "mn",
-  mississippi: "ms",
-  missouri: "mo",
-  montana: "mt",
-  nebraska: "ne",
-  nevada: "nv",
-  "new hampshire": "nh",
-  "new jersey": "nj",
-  "new mexico": "nm",
-  "new york": "ny",
-  "north carolina": "nc",
-  "north dakota": "nd",
-  ohio: "oh",
-  oklahoma: "ok",
-  oregon: "or",
-  pennsylvania: "pa",
-  "rhode island": "ri",
-  "south carolina": "sc",
-  "south dakota": "sd",
-  tennessee: "tn",
-  texas: "tx",
-  utah: "ut",
-  vermont: "vt",
-  virginia: "va",
-  washington: "wa",
-  "west virginia": "wv",
-  wisconsin: "wi",
-  wyoming: "wy",
-  "district of columbia": "dc",
-  "puerto rico": "pr",
+type LocationRow = {
+  location?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  jobCount?: number;
+  companyCount?: number;
+  medianSalary?: number;
+  avgSalary?: number;
+  remoteRatio?: number;
 };
 
-// Reverse map: abbreviation to full name
-const STATE_FULL_NAMES: Record<string, string> = Object.fromEntries(
-  Object.entries(STATE_ABBREVIATIONS).map(([full, abbr]) => [abbr, full]),
-);
+function withSlug(location: LocationRow) {
+  const city = location.city ?? "Unknown";
+  const state = location.state ?? "";
+  const country = location.country ?? "";
 
-// Generate location slug matching database format
-function generateLocationSlug(
-  city?: string | null,
-  state?: string | null,
-  country?: string | null,
-): string {
-  const parts: string[] = [];
-
-  if (city) {
-    parts.push(
-      city
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, ""),
-    );
-  }
-
-  if (state) {
-    const stateLower = state.toLowerCase().trim();
-    const stateSlug = stateLower
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-
-    const abbreviated =
-      STATE_ABBREVIATIONS[stateLower] ||
-      STATE_ABBREVIATIONS[stateSlug] ||
-      stateSlug;
-
-    parts.push(abbreviated);
-  }
-
-  return parts.join("-");
-}
-
-// Normalize state name to abbreviation for consistent comparison
-function normalizeState(state?: string | null): string {
-  if (!state) return "";
-
-  const stateLower = state.toLowerCase().trim();
-  const stateSlug = stateLower.replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-
-  // Return abbreviation if we can find it, otherwise return lowercase version
-  return (
-    STATE_ABBREVIATIONS[stateLower] ||
-    STATE_ABBREVIATIONS[stateSlug] ||
-    stateLower
-  );
-}
-
-// Normalize city name for comparison
-function normalizeCityName(city?: string | null): string {
-  if (!city) return "";
-
-  return city
-    .toLowerCase()
-    .trim()
-    .replace(/\s+city$/i, "") // Remove "City" suffix
-    .replace(/\s+/g, " ") // Normalize spaces
-    .replace(/[^a-z0-9\s]/g, ""); // Remove special chars but keep spaces
-}
-
-// Get the best display name (prefer shorter, cleaner names)
-function getBestDisplayName(name1: string, name2: string): string {
-  // Remove "City" suffix for comparison
-  const clean1 = name1.replace(/\s+City$/i, "");
-  const clean2 = name2.replace(/\s+City$/i, "");
-
-  // If one has "City" and the other doesn't, prefer the one without
-  if (
-    name1.toLowerCase().endsWith(" city") &&
-    !name2.toLowerCase().endsWith(" city")
-  ) {
-    return name2;
-  }
-  if (
-    name2.toLowerCase().endsWith(" city") &&
-    !name1.toLowerCase().endsWith(" city")
-  ) {
-    return name1;
-  }
-
-  // Otherwise prefer the shorter name
-  return name1.length <= name2.length ? name1 : name2;
-}
-
-// Deduplicate locations by normalized city + state
-function deduplicateLocations(locations: any[]): any[] {
-  const locationMap = new Map<string, any>();
-
-  console.log(`🔍 Deduplicating ${locations.length} locations...`);
-
-  for (const location of locations) {
-    // Create a unique key based on normalized city + normalized state
-    const normalizedCity = normalizeCityName(location.city);
-    const normalizedState = normalizeState(location.state);
-    const key = `${normalizedCity}|${normalizedState}`;
-
-    if (locationMap.has(key)) {
-      // Merge with existing location
-      const existing = locationMap.get(key)!;
-
-      // Sum job counts
-      const existingJobs = Number(existing.jobCount) || 0;
-      const newJobs = Number(location.jobCount) || 0;
-      existing.jobCount = existingJobs + newJobs;
-
-      // Weighted median proxy based on job counts (for merged duplicate records)
-      const existingSalary = Number(existing.avgSalary) || 0;
-      const newSalary = Number(location.avgSalary) || 0;
-
-      if (existingSalary > 0 && newSalary > 0) {
-        existing.avgSalary = Math.round(
-          (existingSalary * existingJobs + newSalary * newJobs) /
-            (existingJobs + newJobs),
-        );
-      } else if (newSalary > 0) {
-        existing.avgSalary = newSalary;
-      }
-
-      // Use best display name
-      existing.city = getBestDisplayName(existing.city, location.city);
-
-      // Keep the most complete state name (prefer full name over abbreviation for display)
-      if (
-        location.state &&
-        location.state.length > 2 &&
-        (!existing.state || existing.state.length <= 2)
-      ) {
-        existing.state = location.state;
-      }
-
-      console.log(
-        `  Merged: "${location.city}, ${location.state}" into "${existing.city}, ${existing.state}" (${existing.jobCount} total jobs)`,
-      );
-    } else {
-      // First time seeing this location
-      locationMap.set(key, {
-        ...location,
-        jobCount: Number(location.jobCount) || 0,
-        avgSalary: Number(location.avgSalary) || 0,
-      });
-    }
-  }
-
-  const deduplicated = Array.from(locationMap.values()).sort(
-    (a, b) => (b.jobCount || 0) - (a.jobCount || 0),
-  );
-
-  console.log(`✅ Deduplicated to ${deduplicated.length} unique locations`);
-
-  return deduplicated;
+  return {
+    location: location.location ?? city,
+    city,
+    state,
+    country,
+    lat: location.lat ?? null,
+    lng: location.lng ?? null,
+    jobCount: Number(location.jobCount || 0),
+    companyCount: Number(location.companyCount || 0),
+    medianSalary: Number(location.medianSalary || 0),
+    avgSalary: Number(location.avgSalary || 0),
+    remoteRatio: Number(location.remoteRatio || 0),
+    slug: generateLocationSlug(city, state, country),
+  };
 }
 
 export default async function LocationsPage({ searchParams }: PageProps) {
   const filters = await locationsSearchParamsCache.parse(searchParams);
-  const page =
+
+  const parsedPage =
     typeof filters.page === "string"
-      ? parseInt(filters.page)
-      : filters.page || 1;
+      ? Number.parseInt(filters.page, 10)
+      : filters.page;
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const limit = 50;
   const offset = (page - 1) * limit;
 
-  const [cityDataRaw, countryData] = await Promise.all([
-    getJobsByCity(),
+  const sort: "jobs" | "salary" | "name" =
+    filters.sort === "salary" || filters.sort === "name"
+      ? filters.sort
+      : "jobs";
+
+  const baseQuery = {
+    q: filters.q,
+    state: filters.state,
+    country: filters.country,
+    minSalary: filters.minSalary,
+    minJobs: filters.minJobs,
+    sort,
+  };
+
+  const [pagedLocations, dashboardLocations, countryData] = await Promise.all([
+    getJobsByCityFiltered({ ...baseQuery, page, limit }),
+    getJobsByCityFiltered({ ...baseQuery, page: 1, limit: 5000 }),
     getJobsByCountry(),
   ]);
 
-  // Deduplicate locations FIRST
-  const deduplicatedData = deduplicateLocations(cityDataRaw);
+  const cityData = pagedLocations.items.map(withSlug);
+  const dashboardLocationData = dashboardLocations.items.map(withSlug);
+  const chartReadyData = dashboardLocationData;
 
-  // Then apply search filters
-  let filteredCityData = deduplicatedData;
-
-  if (filters.q) {
-    const searchLower = filters.q.toLowerCase();
-    filteredCityData = deduplicatedData.filter((location: any) => {
-      const cityMatch = location.city?.toLowerCase().includes(searchLower);
-      const stateMatch = location.state?.toLowerCase().includes(searchLower);
-      const countryMatch = location.country
-        ?.toLowerCase()
-        .includes(searchLower);
-      return cityMatch || stateMatch || countryMatch;
-    });
-  }
-
-  // State filter
-  if (filters.state) {
-    const stateLower = filters.state.toLowerCase();
-    filteredCityData = filteredCityData.filter((location: any) => {
-      const locState = normalizeState(location.state);
-      return (
-        locState === stateLower || location.state?.toLowerCase() === stateLower
-      );
-    });
-  }
-
-  // Country filter
-  if (filters.country) {
-    const countryLower = filters.country.toLowerCase();
-    filteredCityData = filteredCityData.filter((location: any) =>
-      location.country?.toLowerCase().includes(countryLower),
-    );
-  }
-
-  // Min salary filter
-  if (filters.minSalary > 0) {
-    filteredCityData = filteredCityData.filter(
-      (location: any) => (location.avgSalary || 0) >= filters.minSalary,
-    );
-  }
-
-  // Min jobs filter
-  if (filters.minJobs > 0) {
-    filteredCityData = filteredCityData.filter(
-      (location: any) => (location.jobCount || 0) >= filters.minJobs,
-    );
-  }
-
-  // Sort
-  if (filters.sort === "salary") {
-    filteredCityData = [...filteredCityData].sort(
-      (a, b) => (b.avgSalary || 0) - (a.avgSalary || 0),
-    );
-  } else if (filters.sort === "name") {
-    filteredCityData = [...filteredCityData].sort((a, b) =>
-      (a.city || "").localeCompare(b.city || ""),
-    );
-  }
-  // default 'jobs' sort is already applied by deduplication
-
-  const totalJobs = filteredCityData.reduce(
-    (sum: number, loc) => sum + (loc.jobCount || 0),
-    0,
-  );
-
-  const hasNextPage = filteredCityData.length > offset + limit;
+  const totalJobs = dashboardLocations.totalJobs;
+  const totalLocations = pagedLocations.total;
+  const hasNextPage = page * limit < pagedLocations.total;
   const hasPrevPage = page > 1;
-
-  const cityData = filteredCityData
-    .slice(offset, offset + limit)
-    .map((location: any) => ({
-      ...location,
-      slug: generateLocationSlug(
-        location.city,
-        location.state,
-        location.country,
-      ),
-    }));
 
   const buildPageUrl = (pageNum: number) => {
     const params = new URLSearchParams();
@@ -350,13 +114,12 @@ export default async function LocationsPage({ searchParams }: PageProps) {
     if (filters.minSalary > 0)
       params.set("minSalary", filters.minSalary.toString());
     if (filters.minJobs > 0) params.set("minJobs", filters.minJobs.toString());
-    if (filters.sort !== "jobs") params.set("sort", filters.sort);
+    if (sort !== "jobs") params.set("sort", sort);
     return `/locations?${params.toString()}`;
   };
 
-  // Calculate Quick Insights Data
-  const locationsWithSalary = deduplicatedData.filter(
-    (loc) => loc.avgSalary && loc.avgSalary > 0,
+  const locationsWithSalary = dashboardLocationData.filter(
+    (loc) => (loc.avgSalary || 0) > 0,
   );
 
   const highestPayingLocation =
@@ -367,30 +130,27 @@ export default async function LocationsPage({ searchParams }: PageProps) {
       : null;
 
   const jobHotspot =
-    deduplicatedData.length > 0
-      ? deduplicatedData.reduce((max, loc) =>
+    dashboardLocationData.length > 0
+      ? dashboardLocationData.reduce((max, loc) =>
           (loc.jobCount || 0) > (max.jobCount || 0) ? loc : max,
         )
       : null;
 
   const marketAverageSalary =
     locationsWithSalary.length > 0
-      ? locationsWithSalary.reduce(
-          (sum, loc) => sum + (loc.avgSalary || 0),
-          0,
-        ) / locationsWithSalary.length
+      ? locationsWithSalary.reduce((sum, loc) => sum + (loc.avgSalary || 0), 0) /
+        locationsWithSalary.length
       : 0;
 
   const comparisonPercentage =
     highestPayingLocation && marketAverageSalary
-      ? ((marketAverageSalary - highestPayingLocation.avgSalary) /
-          highestPayingLocation.avgSalary) *
+      ? ((marketAverageSalary - (highestPayingLocation.avgSalary || 0)) /
+          Math.max(1, highestPayingLocation.avgSalary || 1)) *
         100
       : 0;
 
-  // Prepare data for Regional Distribution (by state)
   const stateDistribution = new Map<string, number>();
-  filteredCityData.forEach((location: any) => {
+  dashboardLocationData.forEach((location) => {
     const state = location.state || "Other";
     const current = stateDistribution.get(state) || 0;
     stateDistribution.set(state, current + (location.jobCount || 0));
@@ -404,7 +164,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
     .slice(5)
     .reduce((sum, [, count]) => sum + count, 0);
 
-  const regionalTotal = totalJobs;
+  const regionalTotal = Math.max(totalJobs, 1);
   const regionalData = [
     ...sortedStates.map(([name, value]) => ({
       name,
@@ -421,32 +181,14 @@ export default async function LocationsPage({ searchParams }: PageProps) {
         ]
       : []),
   ];
-  // Prepare data for charts with slugs
-  const chartReadyData = deduplicatedData.map((location: any) => ({
-    ...location,
-    slug: generateLocationSlug(location.city, location.state, location.country),
-  }));
-  const dashboardLocationData = filteredCityData.map((location: any) => ({
-    ...location,
-    slug: generateLocationSlug(location.city, location.state, location.country),
-  }));
 
   return (
-    <div className="container mx-auto py-8 px-4 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="max-w-2xl space-y-2">
-          <h1 className="text-4xl font-black tracking-tight lg:text-5xl">
-            Location Explorer
-          </h1>
-          <p className="text-lg text-slate-500 dark:text-slate-400">
-            Discover job opportunities and salary insights across cities
-            worldwide
-          </p>
-        </div>
-      </div>
+    <MobilePageShell>
+      <MobilePageHeader
+        title="Location Explorer"
+        subtitle="Discover job opportunities and salary insights across cities worldwide"
+      />
 
-      {/* Quick Insights */}
       {highestPayingLocation && jobHotspot && (
         <QuickInsights
           highestPayingLocation={{
@@ -456,9 +198,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
             salary: highestPayingLocation.avgSalary || 0,
           }}
           jobHotspot={{
-            name: [jobHotspot.city, jobHotspot.state]
-              .filter(Boolean)
-              .join(", "),
+            name: [jobHotspot.city, jobHotspot.state].filter(Boolean).join(", "),
             jobCount: jobHotspot.jobCount || 0,
             trend: "up",
           }}
@@ -469,9 +209,10 @@ export default async function LocationsPage({ searchParams }: PageProps) {
         />
       )}
 
-      <LocationsFilterBar />
+      <MobileStickyActions>
+        <LocationsFilterBar />
+      </MobileStickyActions>
 
-      {/* Tabbed Content */}
       <LocationsTabs
         dashboardContent={
           <>
@@ -479,7 +220,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
               <div className="lg:col-span-8 h-full flex flex-col gap-6">
                 <StatsCards
                   totalJobs={totalJobs}
-                  totalCities={filteredCityData.length}
+                  totalCities={dashboardLocations.total}
                   totalCountries={countryData.length}
                 />
                 <CityOpportunityPanel data={dashboardLocationData} />
@@ -507,7 +248,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
 
               {cityData.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {cityData.map((location: any, index: number) => {
+                  {cityData.map((location, index) => {
                     const locationName = [
                       location.city,
                       location.state,
@@ -551,13 +292,11 @@ export default async function LocationsPage({ searchParams }: PageProps) {
                                       Jobs
                                     </p>
                                     <p className="font-semibold">
-                                      {Number(
-                                        location.jobCount || 0,
-                                      ).toLocaleString()}
+                                      {Number(location.jobCount || 0).toLocaleString()}
                                     </p>
                                   </div>
                                 </div>
-                                {location.avgSalary && (
+                                {(location.avgSalary || 0) > 0 && (
                                   <div className="flex items-center gap-2">
                                     <TrendingUp className="w-4 h-4 text-muted-foreground" />
                                     <div>
@@ -565,11 +304,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
                                         Median Salary
                                       </p>
                                       <p className="font-semibold">
-                                        $
-                                        {(
-                                          Number(location.avgSalary) / 1000
-                                        ).toFixed(0)}
-                                        k
+                                        ${(Number(location.avgSalary) / 1000).toFixed(0)}k
                                       </p>
                                     </div>
                                   </div>
@@ -592,7 +327,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
                       No locations found
                     </h3>
                     <p className="text-muted-foreground text-center mb-4">
-                      Try adjusting your search or filters to find what you're
+                      Try adjusting your search or filters to find what you&apos;re
                       looking for.
                     </p>
                   </CardContent>
@@ -601,7 +336,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
             </div>
 
             {(hasNextPage || hasPrevPage) && cityData.length > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800 gap-4">
+              <div className="flex flex-col gap-4 border-t border-slate-200 py-6 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Showing{" "}
                   <span className="font-bold text-slate-900 dark:text-white">
@@ -613,7 +348,7 @@ export default async function LocationsPage({ searchParams }: PageProps) {
                   </span>{" "}
                   of{" "}
                   <span className="font-bold text-slate-900 dark:text-white">
-                    {filteredCityData.length}
+                    {totalLocations}
                   </span>{" "}
                   locations
                 </p>
@@ -627,8 +362,8 @@ export default async function LocationsPage({ searchParams }: PageProps) {
             )}
           </>
         }
-        mapContent={<GlobalHeatMapCard cityData={deduplicatedData} />}
+        mapContent={<GlobalHeatMapCard cityData={dashboardLocationData} />}
       />
-    </div>
+    </MobilePageShell>
   );
 }

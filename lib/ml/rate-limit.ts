@@ -10,8 +10,21 @@ interface RateLimitRule {
   windowMs: number;
 }
 
-interface RateLimitStore {
-  buckets: Map<string, TokenBucket>;
+export interface MlRateLimitStore {
+  getBucket(key: string): TokenBucket | undefined;
+  setBucket(key: string, bucket: TokenBucket): void;
+}
+
+class InMemoryMlRateLimitStore implements MlRateLimitStore {
+  private readonly buckets = new Map<string, TokenBucket>();
+
+  getBucket(key: string): TokenBucket | undefined {
+    return this.buckets.get(key);
+  }
+
+  setBucket(key: string, bucket: TokenBucket): void {
+    this.buckets.set(key, bucket);
+  }
 }
 
 const ROUTE_RULES: Record<MlEndpointClass, RateLimitRule> = {
@@ -24,12 +37,16 @@ const ROUTE_RULES: Record<MlEndpointClass, RateLimitRule> = {
 const GLOBAL_RULE: RateLimitRule = { capacity: 60, windowMs: 60_000 };
 
 declare global {
-  var __mlProxyRateLimitStore: RateLimitStore | undefined;
+  var __mlProxyRateLimitStore: MlRateLimitStore | undefined;
 }
 
-function getStore(): RateLimitStore {
+export function setMlRateLimitStore(store: MlRateLimitStore): void {
+  globalThis.__mlProxyRateLimitStore = store;
+}
+
+function getStore(): MlRateLimitStore {
   if (!globalThis.__mlProxyRateLimitStore) {
-    globalThis.__mlProxyRateLimitStore = { buckets: new Map() };
+    globalThis.__mlProxyRateLimitStore = new InMemoryMlRateLimitStore();
   }
   return globalThis.__mlProxyRateLimitStore;
 }
@@ -41,7 +58,7 @@ function applyTokenBucket(
 ): { allowed: boolean; remaining: number; retryAfterSeconds: number; resetAtSeconds: number } {
   const store = getStore();
   const refillPerMs = rule.capacity / rule.windowMs;
-  const existing = store.buckets.get(key);
+  const existing = store.getBucket(key);
 
   const bucket: TokenBucket = existing
     ? { ...existing }
@@ -57,7 +74,7 @@ function applyTokenBucket(
     allowed = true;
   }
 
-  store.buckets.set(key, bucket);
+  store.setBucket(key, bucket);
 
   const remaining = Math.max(0, Math.floor(bucket.tokens));
   const deficit = Math.max(0, 1 - bucket.tokens);
@@ -75,10 +92,11 @@ function applyTokenBucket(
 
 function refundToken(key: string, rule: RateLimitRule): void {
   const store = getStore();
-  const bucket = store.buckets.get(key);
+  const bucket = store.getBucket(key);
   if (!bucket) return;
+
   bucket.tokens = Math.min(rule.capacity, bucket.tokens + 1);
-  store.buckets.set(key, bucket);
+  store.setBucket(key, bucket);
 }
 
 export interface MlRateLimitCheckResult {
@@ -136,3 +154,4 @@ export function checkMlRateLimit(
     resetAtSeconds: routeResult.resetAtSeconds,
   };
 }
+

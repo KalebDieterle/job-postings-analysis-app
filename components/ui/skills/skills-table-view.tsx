@@ -57,8 +57,8 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
 
   const sortedData = React.useMemo(() => {
     const sorted = [...data].sort((a, b) => {
-      let aVal: any;
-      let bVal: any;
+      let aVal: string | number;
+      let bVal: string | number;
 
       switch (sortField) {
         case "name":
@@ -141,7 +141,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
     URL.revokeObjectURL(url);
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
+  const renderSortIcon = (field: SortField) => {
     if (sortField !== field) {
       return <ArrowUpDown className="ml-2 h-4 w-4" />;
     }
@@ -204,7 +204,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                     className="flex items-center font-semibold hover:text-slate-900 dark:hover:text-white"
                   >
                     Skill Name
-                    <SortIcon field="name" />
+                    {renderSortIcon("name")}
                   </button>
                 </TableHead>
                 <TableHead>Category</TableHead>
@@ -214,7 +214,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                     className="flex items-center font-semibold hover:text-slate-900 dark:hover:text-white"
                   >
                     Demand
-                    <SortIcon field="demand" />
+                    {renderSortIcon("demand")}
                   </button>
                 </TableHead>
                 <TableHead>
@@ -223,7 +223,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                     className="flex items-center font-semibold hover:text-slate-900 dark:hover:text-white"
                   >
                     Median Salary
-                    <SortIcon field="salary" />
+                    {renderSortIcon("salary")}
                   </button>
                 </TableHead>
                 <TableHead>
@@ -232,7 +232,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                     className="flex items-center font-semibold hover:text-slate-900 dark:hover:text-white"
                   >
                     Growth
-                    <SortIcon field="growth" />
+                    {renderSortIcon("growth")}
                   </button>
                 </TableHead>
                 <TableHead>Top Companies</TableHead>

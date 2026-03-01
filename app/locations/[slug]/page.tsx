@@ -1,4 +1,5 @@
-export const dynamic = "force-dynamic";
+﻿// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 import { notFound } from "next/navigation";
 import {
@@ -7,9 +8,7 @@ import {
   getTopCompaniesByLocation,
   getRecentJobsByLocation,
 } from "@/db/queries";
-import { formatSalary } from "@/lib/location-utils";
 
-// Import new enhanced components
 import { EnhancedHero } from "@/components/location/EnhancedHero";
 import { AnimatedStatCard } from "@/components/location/AnimatedStatCard";
 import { MarketHealthCard } from "@/components/location/MarketHealthCard";
@@ -19,12 +18,12 @@ import { SkillsVisualization } from "@/components/location/SkillsVisualization";
 import { CompaniesChart } from "@/components/location/CompaniesChart";
 import { MarketInsightsPanel } from "@/components/location/MarketInsightsPanel";
 import { JobsSection } from "@/components/location/JobsSection";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
-// Map full state names to abbreviations
 const STATE_ABBREVIATIONS: Record<string, string> = {
   alabama: "al",
   alaska: "ak",
@@ -87,92 +86,59 @@ export default async function LocationDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  // Enhanced slug resolution with state abbreviation handling
   async function resolveStatsAndSlug(slug: string) {
-    console.log("🔍 Attempting to resolve slug:", slug);
-
-    // Strategy 1: Try exact slug match
     let stats = await getLocationStats(slug);
     if (stats) {
-      console.log("✅ Found with exact match:", slug);
       return { stats, slugUsed: slug };
     }
 
-    // Strategy 2: Convert full state name to abbreviation
-    // Expected format: city-state-country or city-state
     const parts = slug.split("-");
 
-    // Try to identify and replace state name with abbreviation
     for (let i = 0; i < parts.length; i++) {
       const potentialState = parts[i];
+      if (!STATE_ABBREVIATIONS[potentialState]) continue;
 
-      // Check if this part is a full state name
-      if (STATE_ABBREVIATIONS[potentialState]) {
-        const abbreviatedParts = [...parts];
-        abbreviatedParts[i] = STATE_ABBREVIATIONS[potentialState];
-        const abbreviatedSlug = abbreviatedParts.join("-");
+      const abbreviatedParts = [...parts];
+      abbreviatedParts[i] = STATE_ABBREVIATIONS[potentialState];
 
-        console.log(
-          `🔄 Trying with abbreviated state (${potentialState} → ${STATE_ABBREVIATIONS[potentialState]}):`,
-          abbreviatedSlug,
-        );
-        stats = await getLocationStats(abbreviatedSlug);
+      const abbreviatedSlug = abbreviatedParts.join("-");
+      stats = await getLocationStats(abbreviatedSlug);
+      if (stats) {
+        return { stats, slugUsed: abbreviatedSlug };
+      }
+
+      if (abbreviatedParts.length > 2) {
+        const withoutCountry = abbreviatedParts.slice(0, -1).join("-");
+        stats = await getLocationStats(withoutCountry);
         if (stats) {
-          console.log("✅ Found with state abbreviation:", abbreviatedSlug);
-          return { stats, slugUsed: abbreviatedSlug };
-        }
-
-        // Also try without the country code
-        if (abbreviatedParts.length > 2) {
-          const withoutCountry = abbreviatedParts.slice(0, -1).join("-");
-          console.log("🔄 Trying abbreviated without country:", withoutCountry);
-          stats = await getLocationStats(withoutCountry);
-          if (stats) {
-            console.log(
-              "✅ Found abbreviated without country:",
-              withoutCountry,
-            );
-            return { stats, slugUsed: withoutCountry };
-          }
+          return { stats, slugUsed: withoutCountry };
         }
       }
     }
 
-    // Strategy 3: Try progressively shorter slug candidates
     for (let len = parts.length - 1; len >= 1; len--) {
       const candidate = parts.slice(0, len).join("-");
-      console.log("🔄 Trying shorter slug:", candidate);
-
       stats = await getLocationStats(candidate);
       if (stats) {
-        console.log("✅ Found with shorter slug:", candidate);
         return { stats, slugUsed: candidate };
       }
     }
 
-    // Strategy 4: Try without country code (last part if it looks like a country code)
     if (parts.length > 2 && parts[parts.length - 1].length === 2) {
       const withoutCountry = parts.slice(0, -1).join("-");
-      console.log("🔄 Trying without country code:", withoutCountry);
-
       stats = await getLocationStats(withoutCountry);
       if (stats) {
-        console.log("✅ Found without country code:", withoutCountry);
         return { stats, slugUsed: withoutCountry };
       }
     }
 
-    console.log("❌ No match found for slug:", slug);
     return { stats: null, slugUsed: slug };
   }
 
   const { stats, slugUsed } = await resolveStatsAndSlug(locationSlug);
 
   if (!stats) {
-    console.error("Location not found:", {
-      originalSlug: locationSlug,
-      attemptedSlug: slugUsed,
-    });
+    console.error("Location not found:", { locationSlug, slugUsed });
     notFound();
   }
 
@@ -187,16 +153,14 @@ export default async function LocationDetailPage({ params }: PageProps) {
     .join(", ");
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      {/* Enhanced Hero with quick stats */}
+    <MobilePageShell>
       <EnhancedHero
         locationName={locationName}
         stats={stats}
         recentJobs={recentJobs}
       />
 
-      {/* Market Health Score + Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         <MarketHealthCard stats={stats} />
         <AnimatedStatCard
           icon="briefcase"
@@ -216,7 +180,6 @@ export default async function LocationDetailPage({ params }: PageProps) {
         />
       </div>
 
-      {/* Salary Distribution Chart */}
       <div className="mb-8">
         <SalaryDistributionChart
           avgMinSalary={stats.medianMinSalary ?? stats.avgMinSalary}
@@ -225,14 +188,12 @@ export default async function LocationDetailPage({ params }: PageProps) {
         />
       </div>
 
-      {/* Charts Row 1: Work Mode & Skills */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <WorkModeChart jobs={recentJobs} />
         <SkillsVisualization skills={topSkills} />
       </div>
 
-      {/* Charts Row 2: Companies & Market Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <CompaniesChart companies={topCompanies} />
         <MarketInsightsPanel
           stats={stats}
@@ -241,10 +202,10 @@ export default async function LocationDetailPage({ params }: PageProps) {
         />
       </div>
 
-      {/* Enhanced Jobs Section with Filters */}
       <div className="mt-8">
         <JobsSection jobs={recentJobs} />
       </div>
-    </div>
+    </MobilePageShell>
   );
 }
+

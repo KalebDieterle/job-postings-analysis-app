@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, Users, DollarSign, Target } from "lucide-react";
+import { TrendingUp, Users, DollarSign, Target, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
 
@@ -22,7 +22,7 @@ const iconMap: Record<string, LucideIcon> = {
   Users,
   DollarSign,
   Target,
-  Sparkles: require("lucide-react").Sparkles, // Add Sparkles
+  Sparkles,
 };
 
 export function StatsOverview({ stats, className }: StatsOverviewProps) {

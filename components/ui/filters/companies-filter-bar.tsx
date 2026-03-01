@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useTransition, useState, useEffect } from "react";
 import { useQueryStates } from "nuqs";
@@ -30,13 +30,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 
 const COMPANY_SIZE_OPTIONS = [
-  { value: "1-10", label: "1–10" },
-  { value: "11-50", label: "11–50" },
-  { value: "51-200", label: "51–200" },
-  { value: "201-500", label: "201–500" },
-  { value: "501-1000", label: "501–1K" },
-  { value: "1001-5000", label: "1K–5K" },
-  { value: "5001-10000", label: "5K–10K" },
+  { value: "1-10", label: "1-10" },
+  { value: "11-50", label: "11-50" },
+  { value: "51-200", label: "51-200" },
+  { value: "201-500", label: "201-500" },
+  { value: "501-1000", label: "501-1K" },
+  { value: "1001-5000", label: "1K-5K" },
+  { value: "5001-10000", label: "5K-10K" },
   { value: "10001+", label: "10K+" },
 ];
 
@@ -267,7 +267,7 @@ export function CompaniesFilterBar() {
             </div>
 
             {/* Reset Row */}
-            <div className="flex items-center justify-between pt-4 border-t">
+            <div className="flex flex-col gap-2 border-t pt-4 md:flex-row md:items-center md:justify-between">
               <Button
                 variant="ghost"
                 onClick={handleReset}
@@ -299,3 +299,5 @@ export function CompaniesFilterBar() {
     </Card>
   );
 }
+
+

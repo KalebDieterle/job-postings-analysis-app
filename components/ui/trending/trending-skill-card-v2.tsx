@@ -34,7 +34,7 @@ export function TrendingSkillCard({
   salaryChange,
   currentSalary,
   trendStatus,
-  category = "Technology",
+  category = "Tools & Platforms",
   chartData,
 }: TrendingSkillCardProps) {
   const colors = getCategoryColors(category);

@@ -18,8 +18,10 @@ import { SalaryInsightsPanel } from "@/components/ui/home/salary-insights-panel"
 import { RecentActivityFeed } from "@/components/ui/home/recent-activity-feed";
 import { QuickActionGrid } from "@/components/ui/home/quick-action-grid";
 import { EnhancedTrendingSkills } from "@/components/ui/home/enhanced-trending-skills";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 export default async function Home() {
   // Fetch all data in parallel
@@ -53,7 +55,7 @@ export default async function Home() {
     <>
       <Header />
 
-      <div className="container mx-auto px-4 py-8 space-y-8">
+      <MobilePageShell className="py-2 md:py-4">
         {/* Hero Stats Section */}
         <section>
           <HeroStats data={statsData} />
@@ -89,7 +91,7 @@ export default async function Home() {
             <RecentActivityFeed data={recentPostings} />
           </div>
         </section>
-      </div>
+      </MobilePageShell>
     </>
   );
 }

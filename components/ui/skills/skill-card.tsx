@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Briefcase, DollarSign, Star } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { getCategoryColors } from "@/lib/skill-helpers";
 
 interface SkillCardProps {
   name: string;
@@ -20,7 +21,7 @@ export function SkillCard({
   name,
   count,
   medianSalary,
-  category = "Technology",
+  category = "Tools & Platforms",
   description,
   trend,
   isFavorite = false,
@@ -31,50 +32,7 @@ export function SkillCard({
   const formattedSalary =
     medianSalary > 0 ? `$${Math.round(medianSalary / 1000)}k` : "N/A";
 
-  // Determine color based on category or default
-  const colorSchemes: Record<
-    string,
-    { bg: string; text: string; bar: string }
-  > = {
-    Frontend: {
-      bg: "bg-blue-50 dark:bg-blue-900/30",
-      text: "text-blue-500",
-      bar: "bg-blue-500",
-    },
-    Backend: {
-      bg: "bg-emerald-50 dark:bg-emerald-900/30",
-      text: "text-emerald-500",
-      bar: "bg-emerald-500",
-    },
-    DevOps: {
-      bg: "bg-orange-50 dark:bg-orange-900/30",
-      text: "text-orange-500",
-      bar: "bg-orange-500",
-    },
-    Database: {
-      bg: "bg-indigo-50 dark:bg-indigo-900/30",
-      text: "text-indigo-500",
-      bar: "bg-indigo-500",
-    },
-    Mobile: {
-      bg: "bg-red-50 dark:bg-red-900/30",
-      text: "text-red-500",
-      bar: "bg-red-500",
-    },
-    Cloud: {
-      bg: "bg-cyan-50 dark:bg-cyan-900/30",
-      text: "text-cyan-500",
-      bar: "bg-cyan-500",
-    },
-    AI: {
-      bg: "bg-violet-50 dark:bg-violet-900/30",
-      text: "text-violet-500",
-      bar: "bg-violet-500",
-    },
-    default: { bg: "bg-primary/10", text: "text-primary", bar: "bg-primary" },
-  };
-
-  const colors = colorSchemes[category] || colorSchemes.default;
+  const colors = getCategoryColors(category);
 
   return (
     <Card className="group relative overflow-hidden border-slate-200 dark:border-slate-800 hover:border-primary/50 hover:shadow-xl transition-all duration-300">

@@ -81,7 +81,7 @@ export function ComparisonPanelWrapper({
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {companies.map((company: Company, index: number) => {
           const companyId = company.company_id || company.slug;
           const isSelected = selectedCompanies.includes(companyId);

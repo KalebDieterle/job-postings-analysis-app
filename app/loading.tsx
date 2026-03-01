@@ -1,41 +1,53 @@
-import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 export default function HomeLoading() {
   return (
-    <div className="container mx-auto space-y-8">
-      {/* Header Skeleton (Matches your Header component height) */}
-      <Skeleton className="h-16 w-full mb-8" />
+    <>
+      <header className="border-b bg-background/95">
+        <div className="mx-auto max-w-5xl space-y-4 px-2 py-8 text-center md:px-4 md:py-12">
+          <div className="flex justify-center">
+            <Skeleton className="h-6 w-40 rounded-full" />
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="mx-auto h-9 w-72 md:h-12 md:w-[34rem]" />
+            <Skeleton className="mx-auto h-4 w-full max-w-xl md:h-5" />
+          </div>
+          <Skeleton className="mx-auto h-px w-32 opacity-70" />
+        </div>
+      </header>
 
-      {/* Highlight Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 mt-30">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="h-50">
-            <CardHeader className="flex flex-row items-center gap-4">
-              <Skeleton className="h-10 w-10 rounded-lg" />
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MobilePageShell className="py-2 md:py-4">
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-32 rounded-xl" />
+          ))}
+        </section>
 
-      {/* Trending Chart Wrapper Skeleton */}
-      <div className="flex justify-center mt-10 px-4">
-        <Card className="w-full max-w-5xl">
-          <CardHeader>
-            <Skeleton className="h-7 w-48" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-100 w-full" />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-28 rounded-xl" />
+          ))}
+        </section>
+
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Skeleton className="h-80 rounded-xl" />
+          <Skeleton className="h-80 rounded-xl" />
+        </section>
+
+        <section>
+          <Skeleton className="h-64 rounded-xl" />
+        </section>
+
+        <section>
+          <Skeleton className="h-80 rounded-xl" />
+        </section>
+
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Skeleton className="h-[28rem] rounded-xl lg:col-span-2" />
+          <Skeleton className="h-[28rem] rounded-xl" />
+        </section>
+      </MobilePageShell>
+    </>
   );
 }

@@ -222,7 +222,7 @@ async function main() {
   const insertStart = Date.now();
 
   // In dry-run, we need to check which companies exist to estimate inserts vs updates
-  let existingCompanyIds: Set<string> = new Set();
+  const existingCompanyIds: Set<string> = new Set();
   if (DRY_RUN) {
     const allIds = toInsert.map(c => c.company_id);
     const QUERY_BATCH_SIZE = 1500; // Under PostgreSQL's 1664 row limit

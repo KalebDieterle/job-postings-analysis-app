@@ -1,4 +1,5 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 import {
   getSkillsWithFilters,
@@ -25,6 +26,9 @@ import { Suspense } from "react";
 import { SkillsGridSkeleton } from "@/components/ui/skills/skills-grid-skeleton";
 import { categorizeSkill } from "@/lib/skill-helpers";
 import { skillsSearchParamsCache } from "@/lib/skills-search-params";
+import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { MobileStickyActions } from "@/components/ui/mobile/mobile-sticky-actions";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -136,7 +140,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
       {skillsData.length > 0 ? (
         <>
           {view === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {skillsData.map((skill) => (
                 <Link
                   key={skill.name}
@@ -169,7 +173,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
           )}
 
           {/* Pagination */}
-          <div className="flex flex-col sm:flex-row items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800 gap-4">
+          <div className="flex flex-col gap-4 border-t border-slate-200 py-6 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Showing{" "}
               <span className="font-bold text-slate-900 dark:text-white">
@@ -201,7 +205,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
             </div>
             <h3 className="text-lg font-semibold mb-2">No skills found</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Try adjusting your search or filters to find what you're looking
+              Try adjusting your search or filters to find what you&apos;re looking
               for.
             </p>
           </CardContent>
@@ -248,28 +252,23 @@ export default async function SkillsPage({
   }));
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <MobilePageShell>
       {/* Header with Actions */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="max-w-2xl space-y-2">
-          <h1 className="text-4xl font-black tracking-tight lg:text-5xl">
-            Skills Explorer
-          </h1>
-          <p className="text-lg text-slate-500 dark:text-slate-400">
-            Analyze real-time demand, salary benchmarks, and industry trends
-            across the global tech landscape.
-          </p>
-        </div>
-        <ExportActions data={exportData} filters={parsedParams} />
-      </div>
+      <MobilePageHeader
+        title="Skills Explorer"
+        subtitle="Analyze real-time demand, salary benchmarks, and industry trends across the global tech landscape."
+        actions={<ExportActions data={exportData} filters={parsedParams} />}
+      />
 
       {/* Functional Filter Bar */}
-      <FunctionalFilterBar />
+      <MobileStickyActions>
+        <FunctionalFilterBar />
+      </MobileStickyActions>
 
       {/* Content with Suspense */}
       <Suspense fallback={<SkillsGridSkeleton />}>
         <SkillsContent searchParams={searchParams} />
       </Suspense>
-    </div>
+    </MobilePageShell>
   );
 }

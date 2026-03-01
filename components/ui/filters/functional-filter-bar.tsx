@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { useQueryStates } from "nuqs";
@@ -85,7 +85,7 @@ export function FunctionalFilterBar() {
     <Card className="shadow-sm">
       <CardContent className="p-6">
         {/* Search Bar */}
-        <div className="flex gap-2 mb-4">
+        <div className="mb-4 flex flex-col gap-2 md:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
@@ -212,7 +212,7 @@ export function FunctionalFilterBar() {
             </div>
 
             {/* Filter Actions */}
-            <div className="flex items-center justify-between pt-4 border-t">
+            <div className="flex flex-col gap-2 border-t pt-4 md:flex-row md:items-center md:justify-between">
               <Button
                 variant="ghost"
                 onClick={handleReset}
@@ -241,3 +241,5 @@ export function FunctionalFilterBar() {
     </Card>
   );
 }
+
+

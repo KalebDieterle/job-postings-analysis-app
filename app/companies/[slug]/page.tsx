@@ -1,6 +1,5 @@
-export const dynamic = "force-dynamic";
-
-// be sure to convert to condensed components later
+﻿// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 import { notFound } from "next/navigation";
 import {
@@ -15,18 +14,11 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Globe, ArrowRight } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { MobileSection } from "@/components/ui/mobile/mobile-section";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -47,7 +39,6 @@ export default async function CompanySlugPage({ params }: PageProps) {
     notFound();
   }
 
-  // Fetch related stats in parallel
   const [jobStats, topRoles, topSkills, recentJobs] = await Promise.all([
     getCompanyJobStats(company.name),
     getCompanyTopRoles(company.name),
@@ -55,7 +46,6 @@ export default async function CompanySlugPage({ params }: PageProps) {
     getCompanyRecentPostings(company.name),
   ]);
 
-  // Compute remote percentage for display (show N/A when totals missing)
   const remotePercent = jobStats.total_postings
     ? Math.round(
         (Number(jobStats.remote_count ?? 0) / Number(jobStats.total_postings)) *
@@ -64,153 +54,150 @@ export default async function CompanySlugPage({ params }: PageProps) {
     : null;
 
   return (
-    <div className="min-h-screen py-8">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        {/* Hero */}
-        <section className="relative overflow-hidden rounded-xl glass-card min-h-55 p-8 flex items-end">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded">
-                Company
-              </span>
-              <span className="text-sm text-muted-foreground">
-                Company Intelligence Profile
+    <MobilePageShell className="pb-8">
+      <section className="relative flex min-h-48 items-end overflow-hidden rounded-xl p-5 glass-card md:min-h-55 md:p-8">
+        <div className="flex-1">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded bg-primary/20 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+              Company
+            </span>
+            <span className="text-xs text-muted-foreground md:text-sm">
+              Company Intelligence Profile
+            </span>
+          </div>
+          <h1 className="text-3xl font-black tracking-tight md:text-6xl">
+            {company.name}
+          </h1>
+          <div className="mt-4 flex flex-wrap gap-2 text-slate-300 md:gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+              <MapPin className="h-4 w-4 text-primary" />
+              <span className="text-xs md:text-sm">
+                {company.city}, {company.state}
               </span>
             </div>
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight">
-              {company.name}
-            </h1>
-            <div className="flex flex-wrap gap-3 mt-4 text-slate-300">
-              <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
-                <MapPin className="h-4 w-4 text-primary" />
-                <span className="text-sm">
-                  {company.city}, {company.state}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10">
-                <Globe className="h-4 w-4 text-primary" />
-                <span className="text-sm">{company.country || "Industry"}</span>
-              </div>
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+              <Globe className="h-4 w-4 text-primary" />
+              <span className="text-xs md:text-sm">{company.country || "Industry"}</span>
             </div>
           </div>
+        </div>
 
-          <div className="ml-6 shrink-0">
-            {company.url && (
-              <Button asChild className="rounded-xl px-5 py-3">
-                <a
-                  href={company.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2"
-                >
-                  Visit LinkedIn
-                  <ArrowRight className="h-4 w-4" />
-                </a>
-              </Button>
-            )}
+        {company.url ? (
+          <div className="ml-4 shrink-0">
+            <Button asChild className="rounded-xl px-4 py-2 md:px-5 md:py-3">
+              <a
+                href={company.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2"
+              >
+                Visit LinkedIn
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </Button>
           </div>
-        </section>
+        ) : null}
+      </section>
 
-        {/* Stats Row */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="glass-card rounded-xl p-6">
-            <CardHeader>
-              <CardTitle className="text-sm text-slate-400">
-                Total Postings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {jobStats.total_postings}
-              </div>
-              <div className="text-sm text-emerald-400 mt-1">Recent</div>
-            </CardContent>
-          </Card>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="rounded-xl p-4 glass-card md:p-6">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-400">Total Postings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold md:text-3xl">{jobStats.total_postings}</div>
+            <div className="mt-1 text-sm text-emerald-400">Recent</div>
+          </CardContent>
+        </Card>
 
-          <Card className="glass-card rounded-xl p-6">
-            <CardHeader>
-              <CardTitle className="text-sm text-slate-400">
-                Active Postings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {jobStats.active_postings}
-              </div>
-              <div className="text-sm text-emerald-400 mt-1">Live roles</div>
-            </CardContent>
-          </Card>
+        <Card className="rounded-xl p-4 glass-card md:p-6">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-400">Active Postings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold md:text-3xl">{jobStats.active_postings}</div>
+            <div className="mt-1 text-sm text-emerald-400">Live roles</div>
+          </CardContent>
+        </Card>
 
-          <Card className="glass-card rounded-xl p-6 border-primary/30 bg-primary/5">
-            <CardHeader>
-              <CardTitle className="text-sm text-slate-400">
-                Median Salary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-primary">
-                {jobStats.median_salary ?? jobStats.avg_salary
-                  ? `$${Number(jobStats.median_salary ?? jobStats.avg_salary).toLocaleString()}`
-                  : "N/A"}
-              </div>
-              <div className="text-sm text-emerald-400 mt-1">
-                Median / Benchmark
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass-card rounded-xl p-6">
-            <CardHeader>
-              <CardTitle className="text-sm text-slate-400">Remote %</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {remotePercent !== null ? `${remotePercent}%` : "N/A"}
-              </div>
-              <div className="text-sm text-emerald-400 mt-1">
-                Remote-friendly roles
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Roles + Skills */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-7 bg-card rounded-xl overflow-hidden border">
-            <div className="px-6 py-4 flex items-center justify-between border-b">
-              <h2 className="text-lg font-bold">Top Roles</h2>
-              <button className="text-primary text-sm font-medium">
-                View all
-              </button>
+        <Card className="rounded-xl border-primary/30 bg-primary/5 p-4 glass-card md:p-6">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-400">Median Salary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary md:text-3xl">
+              {jobStats.median_salary ?? jobStats.avg_salary
+                ? `$${Number(jobStats.median_salary ?? jobStats.avg_salary).toLocaleString()}`
+                : "N/A"}
             </div>
+            <div className="mt-1 text-sm text-emerald-400">Median / Benchmark</div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl p-4 glass-card md:p-6">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-400">Remote %</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold md:text-3xl">
+              {remotePercent !== null ? `${remotePercent}%` : "N/A"}
+            </div>
+            <div className="mt-1 text-sm text-emerald-400">Remote-friendly roles</div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+        <div className="overflow-hidden rounded-xl border bg-card lg:col-span-7">
+          <div className="border-b px-4 py-4 md:px-6">
+            <h2 className="text-lg font-bold">Top Roles</h2>
+          </div>
+
+          <div className="space-y-3 p-4 md:hidden">
+            {topRoles.slice(0, 8).map((role) => (
+              <div key={`mobile-${role.title}`} className="rounded-lg border p-3">
+                <div className="text-sm font-semibold">{role.title}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {role.count} openings
+                </div>
+                <div className="mt-2 text-sm font-medium text-primary">
+                  {role.median_salary ?? role.avg_salary
+                    ? `$${Number(role.median_salary ?? role.avg_salary).toLocaleString()}`
+                    : "N/A"}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <MobileSection
+            collapsible
+            defaultOpen={false}
+            title="Full Roles Table"
+            className="p-4"
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-muted">
-                    <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase">
+                    <th className="px-6 py-4 text-xs font-semibold uppercase text-muted-foreground">
                       Role Name
                     </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-muted-foreground text-center uppercase">
+                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase text-muted-foreground">
                       Openings
                     </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-muted-foreground text-right uppercase">
+                    <th className="px-6 py-4 text-right text-xs font-semibold uppercase text-muted-foreground">
                       Median Salary
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {topRoles.map((role) => (
-                    <tr
-                      key={role.title}
-                      className="hover:bg-muted transition-colors"
-                    >
-                      <td className="px-6 py-4 text-sm font-medium">
-                        {role.title}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-center text-muted-foreground">
+                    <tr key={role.title} className="transition-colors hover:bg-muted">
+                      <td className="px-6 py-4 text-sm font-medium">{role.title}</td>
+                      <td className="px-6 py-4 text-center text-sm text-muted-foreground">
                         {role.count}
                       </td>
-                      <td className="px-6 py-4 text-sm text-right text-slate-300">
+                      <td className="px-6 py-4 text-right text-sm text-slate-300">
                         {role.median_salary ?? role.avg_salary
                           ? `$${Number(role.median_salary ?? role.avg_salary).toLocaleString()}`
                           : "N/A"}
@@ -220,110 +207,140 @@ export default async function CompanySlugPage({ params }: PageProps) {
                 </tbody>
               </table>
             </div>
-          </div>
+          </MobileSection>
+        </div>
 
-          <div className="lg:col-span-5 bg-card rounded-xl border overflow-hidden">
-            <div className="px-6 py-4 border-b">
-              <h2 className="text-lg font-bold">In-Demand Skills</h2>
-            </div>
-            <div className="p-6 flex flex-wrap gap-3">
-              {topSkills.map((skill) => (
+        <div className="overflow-hidden rounded-xl border bg-card lg:col-span-5">
+          <div className="border-b px-4 py-4 md:px-6">
+            <h2 className="text-lg font-bold">In-Demand Skills</h2>
+          </div>
+          <div className="flex flex-wrap gap-2 p-4 md:gap-3 md:p-6">
+            {topSkills.map((skill) => (
+              <span
+                key={skill.skill_name}
+                className={`rounded-full px-3 py-1 text-xs md:text-sm ${
+                  skill.count > 50
+                    ? "bg-primary/20 text-primary"
+                    : "bg-muted text-slate-300"
+                }`}
+              >
+                {skill.skill_name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border bg-card">
+        <div className="border-b px-4 py-4 md:px-6">
+          <h2 className="text-lg font-bold">Recent Job Postings</h2>
+        </div>
+
+        <div className="space-y-3 p-4 md:hidden">
+          {recentJobs.map((job) => (
+            <div key={`mobile-job-${job.job_id}`} className="rounded-lg border p-3">
+              <p className="text-sm font-semibold">{job.title}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{job.location}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <span
-                  key={skill.skill_name}
-                  className={`px-3 py-1 rounded-full ${skill.count > 50 ? "bg-primary/20 text-primary" : "bg-muted text-slate-300"}`}
+                  className={`rounded-full px-2 py-0.5 font-semibold ${
+                    job.remote_allowed
+                      ? "bg-emerald-500/10 text-emerald-400"
+                      : "bg-primary/10 text-primary"
+                  }`}
                 >
-                  {skill.skill_name}
+                  {job.remote_allowed ? "Remote" : "On-site"}
                 </span>
-              ))}
+                <span className="text-slate-300">
+                  {job.min_salary
+                    ? `$${job.min_salary.toLocaleString()} - $${job.max_salary?.toLocaleString() || ""}`
+                    : "N/A"}
+                </span>
+              </div>
+              {job.job_posting_url ? (
+                <a
+                  href={job.job_posting_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                >
+                  Apply
+                </a>
+              ) : null}
             </div>
-          </div>
-        </section>
+          ))}
+        </div>
 
-        {/* Recent Jobs */}
-        <section className="bg-card rounded-xl border overflow-hidden">
-          <div className="px-6 py-4 flex items-center justify-between border-b">
-            <h2 className="text-lg font-bold">Recent Job Postings</h2>
-            <div className="flex gap-2">
-              <button className="btn-secondary">Filter</button>
-              <button className="btn-primary">See All Jobs</button>
-            </div>
-          </div>
+        <MobileSection
+          collapsible
+          defaultOpen={false}
+          title="Full Jobs Table"
+          className="p-4"
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-muted">
-                  <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase">
+                  <th className="px-6 py-4 text-xs font-semibold uppercase text-muted-foreground">
                     Position Title
                   </th>
-                  <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase">
+                  <th className="px-6 py-4 text-xs font-semibold uppercase text-muted-foreground">
                     Location
                   </th>
-                  <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase">
+                  <th className="px-6 py-4 text-xs font-semibold uppercase text-muted-foreground">
                     Salary Range
                   </th>
-                  <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase">
+                  <th className="px-6 py-4 text-xs font-semibold uppercase text-muted-foreground">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase text-right">
+                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase text-muted-foreground">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {recentJobs.map((job) => (
-                  <tr
-                    key={job.job_id}
-                    className="hover:bg-muted transition-colors"
-                  >
+                  <tr key={job.job_id} className="transition-colors hover:bg-muted">
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">{job.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {""}
-                        </span>
-                      </div>
+                      <span className="text-sm font-bold">{job.title}</span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-black ${job.remote_allowed ? "bg-emerald-500/10 text-emerald-400" : "bg-primary/10 text-primary"}`}
-                        >
-                          {job.remote_allowed ? "Remote" : "On-site"}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {job.location}
-                        </span>
-                      </div>
-                    </td>
+                    <td className="px-6 py-4 text-xs text-muted-foreground">{job.location}</td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-300">
                       {job.min_salary
-                        ? `$${job.min_salary.toLocaleString()} – $${job.max_salary?.toLocaleString() || ""}`
+                        ? `$${job.min_salary.toLocaleString()} - $${job.max_salary?.toLocaleString() || ""}`
                         : "N/A"}
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`inline-flex items-center gap-2 text-xs font-semibold ${job.remote_allowed ? "text-emerald-400" : "text-amber-400"}`}
+                        className={`inline-flex items-center gap-2 text-xs font-semibold ${
+                          job.remote_allowed ? "text-emerald-400" : "text-amber-400"
+                        }`}
                       >
                         {job.remote_allowed ? "Remote" : "Active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-primary/10 text-primary font-bold">
-                        Apply
-                      </button>
+                      {job.job_posting_url ? (
+                        <a
+                          href={job.job_posting_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-1.5 font-bold text-primary transition-colors hover:bg-primary/20"
+                        >
+                          Apply
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unavailable</span>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-4 border-t text-center">
-            <button className="text-sm text-muted-foreground">
-              Load more opportunities
-            </button>
-          </div>
-        </section>
-      </main>
-    </div>
+        </MobileSection>
+      </section>
+    </MobilePageShell>
   );
 }
+

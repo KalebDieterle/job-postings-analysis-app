@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Normalize city names aggressively
  */
 function normalizeCity(raw: string): string | null {
-  let city = raw
+  const city = raw
     .toLowerCase()
     .trim()
     .replace(/^\d+\s*/, '') // leading zip codes

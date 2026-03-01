@@ -31,14 +31,14 @@ export function TrendingFilters() {
   };
 
   return (
-    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+    <div className="flex flex-col gap-4 md:flex-row md:items-center">
       {/* Timeframe Filter */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Clock className="h-4 w-4" />
           <span>Timeframe</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {TIMEFRAMES.map((timeframe) => (
             <Button
               key={timeframe.value}
@@ -59,14 +59,14 @@ export function TrendingFilters() {
       </div>
 
       {/* Divider */}
-      <div className="hidden sm:block h-12 w-px bg-slate-200 dark:bg-slate-800" />
+      <div className="hidden h-12 w-px bg-slate-200 dark:bg-slate-800 md:block" />
 
       {/* Metric Filter */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <span>Sort By</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {METRICS.map((metric) => {
             const Icon = metric.icon;
             return (

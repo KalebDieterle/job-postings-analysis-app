@@ -1,28 +1,54 @@
-import { NextRequest, NextResponse } from "next/server"; // Use NextRequest for URL parsing
-import { getAllSkills } from "@/db/queries";
+import { NextRequest, NextResponse } from "next/server";
+import { getAllSkillsPaginated } from "@/db/queries";
+import {
+  parseBoundedIntParam,
+  parseStringParam,
+} from "@/lib/api-validation";
 
 export async function GET(request: NextRequest) {
-    // 1. Extract searchParams from the URL
-    const { searchParams } = new URL(request.url);
-    
-    // 2. Parse values (providing defaults to match your query logic)
-    const search = searchParams.get("search") || "";
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "12");
+  const { searchParams } = new URL(request.url);
 
-    // 3. Pass the required object to getAllSkills
-    const trendingRaw = await getAllSkills({
-        search,
-        page,
-        limit
-    });
+  const searchResult = parseStringParam(searchParams, "search", 120);
+  if ("error" in searchResult) {
+    return NextResponse.json({ error: searchResult.error }, { status: 400 });
+  }
 
-    const trendingData = trendingRaw.map((row: any) => ({
-        name: row.name, // Matches the key name defined in our Step 1 query
-        count: Number(row.count),
-        medianSalary: Number(row.median_salary ?? row.medianSalary ?? row.avg_salary ?? row.avgSalary ?? 0),
-        avgSalary: Number(row.median_salary ?? row.medianSalary ?? row.avg_salary ?? row.avgSalary ?? 0),
-    }));
+  const pageResult = parseBoundedIntParam(searchParams, "page", {
+    defaultValue: 1,
+    min: 1,
+    max: 10_000,
+  });
+  if ("error" in pageResult) {
+    return NextResponse.json({ error: pageResult.error }, { status: 400 });
+  }
 
-    return NextResponse.json(trendingData);
+  const limitResult = parseBoundedIntParam(searchParams, "limit", {
+    defaultValue: 12,
+    min: 1,
+    max: 100,
+  });
+  if ("error" in limitResult) {
+    return NextResponse.json({ error: limitResult.error }, { status: 400 });
+  }
+
+  const result = await getAllSkillsPaginated({
+    search: searchResult.value,
+    page: pageResult.value,
+    limit: limitResult.value,
+  });
+
+  const items = result.items.map((row) => ({
+    name: row.name,
+    count: Number(row.count),
+    medianSalary: Number(row.median_salary ?? row.avg_salary ?? 0),
+    avgSalary: Number(row.median_salary ?? row.avg_salary ?? 0),
+  }));
+
+  return NextResponse.json({
+    items,
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
+    hasNext: result.hasNext,
+  });
 }

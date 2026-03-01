@@ -1,39 +1,39 @@
-import React from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
-export default function Loading() {
+export default function CompaniesLoading() {
   return (
-    <div className="space-y-6">
-      {/* Header Skeleton */}
-      <div className="h-10 w-64 bg-muted animate-pulse rounded-md" />
+    <MobilePageShell className="pb-4 md:pb-10">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-52 md:h-10 md:w-64" />
+      </div>
 
-      {/* FilterBar Skeleton */}
-      <div className="h-16 bg-card border rounded-lg animate-pulse" />
-
-      {/* CompanyOverview Skeleton */}
-      <div className="h-32 bg-card border rounded-lg animate-pulse" />
-
-      {/* IndustryRadarChart Skeleton */}
-      <div className="h-64 bg-card border rounded-lg animate-pulse" />
-
-      {/* Info text skeleton */}
-      <div className="h-5 w-48 bg-muted animate-pulse rounded-md" />
-
-      {/* Company Cards Grid Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-40 bg-card border rounded-xl animate-pulse"
-          />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-32 rounded-xl" />
         ))}
       </div>
 
-      {/* Pagination Skeleton */}
-      <div className="flex items-center justify-center gap-2 mt-8">
-        <div className="h-10 w-24 bg-muted animate-pulse rounded-md" />
-        <div className="h-10 w-16 bg-muted animate-pulse rounded-md" />
-        <div className="h-10 w-24 bg-muted animate-pulse rounded-md" />
+      <Skeleton className="h-16 rounded-xl" />
+      <Skeleton className="h-28 rounded-xl" />
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Skeleton className="h-80 rounded-xl" />
+        <Skeleton className="h-80 rounded-xl" />
       </div>
-    </div>
+
+      <Skeleton className="h-7 w-40" />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 9 }).map((_, index) => (
+          <Skeleton key={index} className="h-44 rounded-xl" />
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-4 border-t py-6 md:flex-row md:items-center md:justify-between">
+        <Skeleton className="h-5 w-56" />
+        <Skeleton className="h-10 w-52 rounded-lg" />
+      </div>
+    </MobilePageShell>
   );
 }

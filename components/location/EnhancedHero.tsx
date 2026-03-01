@@ -57,11 +57,11 @@ export function EnhancedHero({
         variants={itemVariants}
         className="flex items-center gap-3 mb-4"
       >
-        <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-3 rounded-lg">
-          <MapPin className="w-8 h-8 text-white" />
+        <div className="rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 p-2.5 md:p-3">
+          <MapPin className="h-6 w-6 text-white md:h-8 md:w-8" />
         </div>
         <div>
-          <h1 className="text-4xl font-bold">{locationName}</h1>
+          <h1 className="text-2xl font-bold md:text-4xl">{locationName}</h1>
           <p className="text-muted-foreground">
             Job market insights and analytics
           </p>
@@ -69,15 +69,15 @@ export function EnhancedHero({
       </motion.div>
 
       {/* Quick Stats Pills */}
-      <motion.div variants={itemVariants} className="flex flex-wrap gap-3">
-        <Badge variant="secondary" className="px-4 py-2 text-sm">
+      <motion.div variants={itemVariants} className="flex flex-wrap gap-2 md:gap-3">
+        <Badge variant="secondary" className="px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm">
           <span className="font-semibold">{remotePercentage}%</span>
           <span className="ml-1">Remote opportunities</span>
         </Badge>
 
         <Badge
           variant="secondary"
-          className={`px-4 py-2 text-sm ${
+          className={`px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm ${
             competition.color === "green"
               ? "bg-green-100 text-green-700 hover:bg-green-200"
               : competition.color === "yellow"
@@ -89,7 +89,7 @@ export function EnhancedHero({
           <span className="ml-1">Competition</span>
         </Badge>
 
-        <Badge variant="secondary" className="px-4 py-2 text-sm">
+        <Badge variant="secondary" className="px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm">
           <span className="font-semibold">{jobsPerCompany.toFixed(1)}</span>
           <span className="ml-1">Jobs per company</span>
         </Badge>

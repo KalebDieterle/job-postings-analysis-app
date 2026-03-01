@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export function SkillsGridSkeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {Array.from({ length: 12 }).map((_, i) => (
         <Card key={i} className="overflow-hidden">
           <CardContent className="p-6 space-y-4">

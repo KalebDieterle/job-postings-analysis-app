@@ -20,7 +20,7 @@ export default function IconAvatar({ title, size = 40 }: IconAvatarProps) {
       className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm"
       aria-hidden
     >
-      <Icon size={px} color={fg} />
+      {React.createElement(Icon, { size: px, color: fg })}
     </div>
   );
 }

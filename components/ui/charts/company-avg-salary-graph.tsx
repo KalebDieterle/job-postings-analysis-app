@@ -30,6 +30,44 @@ interface CompanyAvgSalaryGraphProps {
   fortuneData: CompanyData[];
 }
 
+type TooltipPayloadItem = {
+  payload: CompanyData;
+};
+
+type CompanyTooltipProps = {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+};
+
+function CompanySalaryTooltip({ active, payload }: CompanyTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0].payload;
+
+  return (
+    <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 shadow-2xl">
+      <p className="font-bold text-white text-sm mb-1">{item.company}</p>
+      <div className="space-y-1">
+        <p className="text-emerald-400 text-lg font-bold">
+          ${Math.round(item.median_salary ?? item.avg_salary).toLocaleString()}
+        </p>
+        {item.fortune_rank && (
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">
+            Fortune Rank: #{item.fortune_rank}
+          </p>
+        )}
+        <div className="pt-1 border-t border-slate-800 mt-1">
+          <p className="text-slate-500 text-[10px] font-medium">
+            {item.employee_count?.toLocaleString() || "N/A"} Total Employees
+          </p>
+          <p className="text-slate-500 text-[10px] font-medium">
+            {item.posting_count ?? 0} Active Postings Analyzed
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
   data,
   globalMedian,
@@ -57,36 +95,6 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
   const getBarColor = (salary: number) => {
     const diff = globalMedian > 0 ? ((salary - globalMedian) / globalMedian) * 100 : 0;
     return diff > 0 ? "#10b981" : "#fbbf24";
-  };
-
-  // Custom Tooltip for the dark theme
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const item = payload[0].payload;
-
-    return (
-      <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 shadow-2xl">
-        <p className="font-bold text-white text-sm mb-1">{item.company}</p>
-        <div className="space-y-1">
-          <p className="text-emerald-400 text-lg font-bold">
-            ${Math.round(item.median_salary ?? item.avg_salary).toLocaleString()}
-          </p>
-          {item.fortune_rank && (
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">
-              Fortune Rank: #{item.fortune_rank}
-            </p>
-          )}
-          <div className="pt-1 border-t border-slate-800 mt-1">
-            <p className="text-slate-500 text-[10px] font-medium">
-              {item.employee_count?.toLocaleString() || "N/A"} Total Employees
-            </p>
-            <p className="text-slate-500 text-[10px] font-medium">
-              {item.posting_count ?? 0} Active Postings Analyzed
-            </p>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -142,7 +150,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
               tick={{ fontSize: 11, fill: "#64748b" }}
             />
             <Tooltip
-              content={<CustomTooltip />}
+              content={<CompanySalaryTooltip />}
               cursor={{ fill: "rgba(255,255,255,0.03)" }}
             />
 

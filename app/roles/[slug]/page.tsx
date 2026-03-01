@@ -1,6 +1,6 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
-import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -24,10 +24,11 @@ import {
   getTopSkillsForRole,
   getTopCompaniesForRole,
   getRoleStats,
-  getRoleGrowth, // Ensure this is exported in your db/queries.ts
+  getRoleGrowth,
 } from "@/db/queries";
 import { RoleSalaryPreview } from "@/components/ui/intelligence/role-salary-preview";
 import { RoleSimilarRoles } from "@/components/ui/intelligence/role-similar-roles";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 interface PageProps {
   params: Promise<{
@@ -36,9 +37,6 @@ interface PageProps {
 }
 
 export default async function RoleDetailPage({ params }: PageProps) {
-  console.log("🚀 [RoleDetailPage] Starting Render");
-  const pageStart = Date.now();
-
   const { slug } = await params;
   const slugStr = Array.isArray(slug) ? slug.join("-") : (slug ?? "");
 
@@ -59,14 +57,10 @@ export default async function RoleDetailPage({ params }: PageProps) {
     getRoleGrowth(title),
   ]);
 
-  console.log(
-    `✅ [RoleDetailPage] Data fetched in ${Date.now() - pageStart}ms`,
-  );
-
   // Handle Empty State
   if (jobs.length === 0) {
     return (
-      <div className="container mx-auto p-6 pt-10 space-y-8">
+      <MobilePageShell className="space-y-8 pt-2 md:pt-4">
         <Link href="/roles">
           <Button
             variant="ghost"
@@ -77,12 +71,12 @@ export default async function RoleDetailPage({ params }: PageProps) {
           </Button>
         </Link>
         <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-slate-50/50">
-          <h1 className="text-3xl font-bold mb-2">{title}</h1>
+          <h1 className="mb-2 text-2xl font-bold md:text-3xl">{title}</h1>
           <p className="text-muted-foreground">
             No active job postings found for this role in the current dataset.
           </p>
         </div>
-      </div>
+      </MobilePageShell>
     );
   }
 
@@ -90,12 +84,13 @@ export default async function RoleDetailPage({ params }: PageProps) {
   const totalJobs = Number(stats.total_jobs);
   const topSkillName =
     skills.length > 0 ? skills[0].skill_name : "Specialized skills";
-  const isPositiveGrowth = growth >= 0;
+  const safeGrowth = Number.isFinite(growth) ? growth : 0;
+  const isPositiveGrowth = safeGrowth >= 0;
 
   return (
-    <div className="container mx-auto p-6 pt-8 max-w-7xl">
+    <MobilePageShell className="max-w-7xl pt-2 md:pt-4">
       {/* 1. Navigation */}
-      <div className="flex items-center pb-6">
+      <div className="flex items-center pb-4 md:pb-6">
         <Link href="/roles">
           <Button
             variant="ghost"
@@ -108,9 +103,9 @@ export default async function RoleDetailPage({ params }: PageProps) {
         </Link>
       </div>
 
-      <div className="space-y-10">
+      <div className="space-y-6 md:space-y-10">
         {/* 2. THE INSIGHT HEADER */}
-        <header className="relative overflow-hidden rounded-2xl border border-blue-100 bg-linear-to-br from-blue-50/50 via-white to-indigo-50/30 p-8 shadow-sm">
+        <header className="relative overflow-hidden rounded-2xl border border-blue-100 bg-linear-to-br from-blue-50/50 via-white to-indigo-50/30 p-5 shadow-sm md:p-8">
           <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -132,16 +127,17 @@ export default async function RoleDetailPage({ params }: PageProps) {
                   ) : (
                     <ArrowDownRight className="w-3.5 h-3.5" />
                   )}
-                  Postings {isPositiveGrowth ? "up" : "down"} {Math.abs(growth)}
+                  Postings {isPositiveGrowth ? "up" : "down"}{" "}
+                  {Math.abs(safeGrowth)}
                   % this month
                 </div>
               </div>
 
-              <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl text-slate-900">
+              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-4xl lg:text-5xl">
                 {title}
               </h1>
 
-              <p className="text-lg text-slate-600 font-medium max-w-3xl leading-relaxed">
+              <p className="max-w-3xl text-sm font-medium leading-relaxed text-slate-600 md:text-lg">
                 {topSkillName} remains the most critical requirement for this
                 role. Demand is currently{" "}
                 {isPositiveGrowth ? "strengthening" : "shifting"} across{" "}
@@ -196,7 +192,9 @@ export default async function RoleDetailPage({ params }: PageProps) {
           />
           <StatCard
             title="Hiring Velocity"
-            value={growth > 5 ? "Fast" : growth > -5 ? "Stable" : "Cooling"}
+            value={
+              safeGrowth > 5 ? "Fast" : safeGrowth > -5 ? "Stable" : "Cooling"
+            }
             icon={TrendingUp}
             description="Based on 30-day trend"
           />
@@ -238,7 +236,7 @@ export default async function RoleDetailPage({ params }: PageProps) {
             <div className="flex flex-col gap-3">
               {companies.map((company, index) => (
                 <CompanyCardPerRole
-                  key={company.company_name}
+                  key={`${company.company_name}-${index}`}
                   name={company.company_name}
                   count={Number(company.count)}
                   rank={index + 1}
@@ -249,6 +247,6 @@ export default async function RoleDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
-    </div>
+    </MobilePageShell>
   );
 }

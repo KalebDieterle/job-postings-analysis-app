@@ -1,4 +1,5 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
 import { getSkillDetails, getSkillTrendingData } from "@/db/queries";
 import { SkillTimelineChart } from "@/components/ui/charts/skill-timeline-chart";
@@ -7,6 +8,7 @@ import { Briefcase, DollarSign, BarChart3, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 interface TopEmployer {
   name: string | null;
@@ -27,7 +29,7 @@ export default async function SkillDetailPage({
   ]);
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <MobilePageShell>
       {/* Back Button */}
       <Link href="/skills">
         <Button
@@ -41,10 +43,10 @@ export default async function SkillDetailPage({
 
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl capitalize">
+        <h1 className="text-2xl font-extrabold tracking-tight capitalize md:text-4xl lg:text-5xl">
           {decodedName}
         </h1>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-sm text-muted-foreground md:text-lg">
           Detailed market analysis for {decodedName}
         </p>
       </div>
@@ -91,7 +93,7 @@ export default async function SkillDetailPage({
         <CardContent>
           <div className="space-y-3">
             {details.topEmployers.length > 0 ? (
-              details.topEmployers.map((company: TopEmployer, index) => (
+              details.topEmployers.slice(0, 8).map((company: TopEmployer, index) => (
                 <div
                   key={company.name ?? `company-${index}`}
                   className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
@@ -122,6 +124,6 @@ export default async function SkillDetailPage({
           </div>
         </CardContent>
       </Card>
-    </div>
+    </MobilePageShell>
   );
 }

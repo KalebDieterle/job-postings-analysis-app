@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCachedMlPayload, setCachedMlPayload } from "@/lib/ml/proxy-cache";
@@ -12,10 +14,25 @@ import {
 const ROUTE = "/api/ml/salary/metadata";
 const QUERY_CACHE_TTL_SECONDS = 15 * 60;
 const BASE_CACHE_TTL_SECONDS = 6 * 60 * 60;
+const DEGRADED_CACHE_TTL_SECONDS = 5 * 60;
+
+function buildDegradedMetadataPayload() {
+  return {
+    skills: [],
+    titles: [],
+    company_scale_tiers: [],
+    degraded: true,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const guard = runMlProxyGuards(request, "metadata", ROUTE);
-  if (guard.response) return guard.response;
+  if (guard.response) {
+    if (guard.response.status === 429) return guard.response;
+    return NextResponse.json(buildDegradedMetadataPayload(), {
+      headers: { "x-ml-degraded": "1" },
+    });
+  }
   const context = guard.context;
 
   try {
@@ -45,14 +62,31 @@ export async function GET(request: NextRequest) {
     });
 
     if (!res.ok) {
-      const response = await proxyUpstreamError(res);
+      if (res.status === 429) {
+        const response = await proxyUpstreamError(res);
+        logMlProxyResult(
+          context,
+          ROUTE,
+          "metadata",
+          response.status,
+          response.status === 429,
+          "upstream_error",
+        );
+        return response;
+      }
+
+      const degradedPayload = buildDegradedMetadataPayload();
+      setCachedMlPayload(cacheKey, degradedPayload, DEGRADED_CACHE_TTL_SECONDS);
+      const response = NextResponse.json(degradedPayload, {
+        headers: { "x-ml-degraded": "1" },
+      });
       logMlProxyResult(
         context,
         ROUTE,
         "metadata",
-        response.status,
-        response.status === 429,
-        "upstream_error",
+        200,
+        false,
+        "degraded_upstream_error",
       );
       return response;
     }
@@ -65,11 +99,11 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("ML salary metadata proxy error:", error);
-    const response = NextResponse.json(
-      { error: "ml_unavailable", message: "ML service unavailable" },
-      { status: 503 },
-    );
-    logMlProxyResult(context, ROUTE, "metadata", 503, true, "exception");
+    const degradedPayload = buildDegradedMetadataPayload();
+    const response = NextResponse.json(degradedPayload, {
+      headers: { "x-ml-degraded": "1" },
+    });
+    logMlProxyResult(context, ROUTE, "metadata", 200, false, "degraded_exception");
     return response;
   }
 }

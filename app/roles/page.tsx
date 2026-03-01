@@ -1,6 +1,6 @@
-export const dynamic = "force-dynamic";
+// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
+export const revalidate = 1800;
 
-import React, { Suspense } from "react";
 import {
   getTopJobRoles,
   getTopRolesTimeSeries,
@@ -26,6 +26,9 @@ import { ExperienceBreakdownChart } from "@/components/ui/roles/experience-break
 import { slugify } from "@/lib/slugify";
 import { searchParamsCache } from "@/lib/search-params";
 import { FilterBar } from "@/components/ui/filters/filter-bar";
+import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
+import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { MobileStickyActions } from "@/components/ui/mobile/mobile-sticky-actions";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -76,14 +79,12 @@ export default async function RolesPage({ searchParams }: PageProps) {
     const totalRoles = roleDistribution.reduce((sum, r) => sum + r.count, 0);
 
     return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="pb-2">
-          <h1 className="text-3xl font-bold mb-1">Explore Roles</h1>
-          <p className="text-muted-foreground text-sm">
-            {totalRoles.toLocaleString()} postings across all roles
-          </p>
-        </div>
+      <MobilePageShell>
+        <MobilePageHeader
+          title="Explore Roles"
+          subtitle={`${totalRoles.toLocaleString()} postings across all roles`}
+          compact
+        />
 
         {/* Stats Grid */}
         <StatsGrid
@@ -114,12 +115,14 @@ export default async function RolesPage({ searchParams }: PageProps) {
         </div>
 
         {/* Filter Bar */}
-        <FilterBar />
+        <MobileStickyActions>
+          <FilterBar />
+        </MobileStickyActions>
 
         {/* Role Cards Grid */}
-        <h2 className="text-2xl font-bold">Browse All Roles</h2>
+        <h2 className="text-xl font-bold md:text-2xl">Browse All Roles</h2>
         {roles.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {roles.map((r: any) => (
               <RoleCard
                 key={r.title}
@@ -142,7 +145,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
         )}
 
         {/* Pagination Controls */}
-        <div className="flex items-center justify-between py-6 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex flex-col gap-3 border-t border-slate-200 py-6 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
           <div className="text-sm text-slate-500">Page {filters.page ?? 1}</div>
           <PaginationControls
             currentPage={Number(filters.page ?? 1)}
@@ -179,10 +182,9 @@ export default async function RolesPage({ searchParams }: PageProps) {
           </div>
           <SkillsFrequencyChart data={skillsFrequency} />
         </div>
-      </div>
+      </MobilePageShell>
     );
   } catch (error) {
-    console.error("❌ [RolesPage] Error:", error);
     throw error;
   }
 }

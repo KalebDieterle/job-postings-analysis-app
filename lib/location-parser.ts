@@ -140,7 +140,7 @@ export function parseJobLocation(location: string | null | undefined): ParsedLoc
   }
 
   // ── strip "Greater … Area" / "… Metropolitan Area" ───
-  let cleaned = normalized
+  const cleaned = normalized
     .replace(/^greater\s+/i, '')
     .replace(/\s+(metro(politan)?\s+)?area$/i, '')
     .trim();

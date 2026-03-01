@@ -55,8 +55,8 @@ function CompanyCard({ company }: { company: CompanyData }) {
             </span>
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link href={`/companies`}>
-              View Jobs →
+            <Link href={`/companies/${encodeURIComponent(slug)}`}>
+              View Company
             </Link>
           </Button>
         </div>
@@ -70,14 +70,14 @@ export function TopCompaniesGrid({ data }: { data: CompanyData[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-2xl font-bold">Top Hiring Companies</h3>
+          <h3 className="text-xl font-bold md:text-2xl">Top Hiring Companies</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Companies with the most active job postings
           </p>
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {data.map((company, idx) => (
           <CompanyCard key={idx} company={company} />
         ))}

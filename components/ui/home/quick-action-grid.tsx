@@ -39,13 +39,13 @@ const actions = [
 
 export function QuickActionGrid() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
       {actions.map((action) => (
         <Link key={action.href} href={action.href}>
-          <Card className={`group h-full bg-gradient-to-br ${action.gradient} border-2 hover:border-primary/50 transition-all duration-300 hover:scale-105 hover:shadow-xl`}>
-            <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
-              <div className={`rounded-2xl bg-background p-4 group-hover:scale-110 transition-transform duration-300`}>
-                <action.icon className={`h-12 w-12 ${action.iconColor}`} />
+          <Card className={`group h-full border-2 bg-gradient-to-br ${action.gradient} transition-all duration-300 hover:border-primary/50 hover:shadow-xl md:hover:scale-105`}>
+            <CardContent className="flex flex-col items-center space-y-3 p-5 text-center md:space-y-4 md:p-6">
+              <div className={`rounded-2xl bg-background p-3 transition-transform duration-300 group-hover:scale-110 md:p-4`}>
+                <action.icon className={`h-10 w-10 md:h-12 md:w-12 ${action.iconColor}`} />
               </div>
               <div>
                 <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">

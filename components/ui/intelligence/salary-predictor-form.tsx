@@ -384,7 +384,7 @@ export function SalaryPredictorForm() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="location">Location</Label>
               <Input
@@ -411,7 +411,7 @@ export function SalaryPredictorForm() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Experience Level</Label>
               <Select value={experienceLevel} onValueChange={setExperienceLevel}>
@@ -444,7 +444,7 @@ export function SalaryPredictorForm() {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Remote</Label>
               <Select value={remoteAllowed} onValueChange={setRemoteAllowed}>
@@ -483,7 +483,10 @@ export function SalaryPredictorForm() {
                 Loading skill vocabulary...
               </div>
             ) : availableSkills.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No model skill metadata found.</p>
+              <p className="text-sm text-muted-foreground">
+                Skill metadata is currently unavailable. You can still submit
+                with role, location, and company inputs.
+              </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {availableSkills.map((skill) => (

@@ -98,7 +98,7 @@ export function ComparisonPanel({
   return (
     <>
       {/* Floating Button */}
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 md:right-6 md:bottom-6">
         <Button
           onClick={() => setIsOpen(true)}
           disabled={selectedCompanies.length < 2}
@@ -127,7 +127,7 @@ export function ComparisonPanel({
 
       {/* Comparison Modal */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-full sm:max-w-6xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-h-[90vh] max-w-full overflow-y-auto p-4 sm:max-w-6xl sm:p-6">
           <DialogHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <DialogTitle className="text-xl sm:text-2xl font-bold">
@@ -211,8 +211,8 @@ export function ComparisonPanel({
               </div>
 
               {/* Comparison Table */}
-              <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto">
-                <table className="w-full min-w-[600px]">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                <table className="w-full min-w-[720px]">
                   <thead className="bg-slate-50 dark:bg-slate-900">
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-slate-900 dark:text-white">

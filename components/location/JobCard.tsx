@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DollarSign, Clock, Bookmark } from "lucide-react";
+import { DollarSign, Clock } from "lucide-react";
 import { formatSalary } from "@/lib/location-utils";
 import { formatRelativeTime } from "@/lib/location-analytics";
 import { motion } from "framer-motion";
@@ -93,26 +93,19 @@ export function JobCard({ job }: JobCardProps) {
                   : "Recently posted"}
               </span>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline">
-                <Bookmark className="w-4 h-4" />
-              </Button>
-              {job.jobPostingUrl ? (
-                <Button size="sm" asChild>
-                  <a
-                    href={job.jobPostingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View
-                  </a>
-                </Button>
-              ) : (
-                <Button size="sm" disabled>
+            {job.jobPostingUrl ? (
+              <Button size="sm" asChild>
+                <a
+                  href={job.jobPostingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   View
-                </Button>
-              )}
-            </div>
+                </a>
+              </Button>
+            ) : (
+              <span className="text-xs text-muted-foreground">Unavailable</span>
+            )}
           </div>
         </CardContent>
       </Card>

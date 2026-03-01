@@ -76,6 +76,7 @@ export function CompanyCardWithCheckbox({
         country={country}
         rank={rank}
         count={count}
+        reserveTopRightSpace
       />
     </div>
   );

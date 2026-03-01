@@ -147,7 +147,7 @@ export function JobsSection({ jobs }: JobsSectionProps) {
 
   return (
     <div id="jobs-section" className="mt-8">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+      <h2 className="mb-6 flex items-center gap-2 text-xl font-bold md:text-2xl">
         <Briefcase className="w-6 h-6" />
         Recent Job Openings
       </h2>
@@ -173,7 +173,7 @@ export function JobsSection({ jobs }: JobsSectionProps) {
       {/* Job Cards Grid */}
       {paginatedJobs.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 gap-4 md:mb-6 lg:grid-cols-2">
             {paginatedJobs.map((job) => (
               <JobCard key={job.jobId} job={job} />
             ))}
