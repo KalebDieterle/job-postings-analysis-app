@@ -1,0 +1,8 @@
+ml-service/
+PSQL Data Loader/
+data/
+.claude/
+.VSCodeCounter/
+docs/
+*.csv
+*.md
