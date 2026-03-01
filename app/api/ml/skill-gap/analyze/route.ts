@@ -1,32 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8000";
+import {
+  buildMlUpstreamHeaders,
+  getMlServiceUrl,
+  logMlProxyResult,
+  proxyUpstreamError,
+  runMlProxyGuards,
+} from "@/lib/ml/proxy-utils";
+
+const ROUTE = "/api/ml/skill-gap/analyze";
 
 export async function POST(request: NextRequest) {
+  const guard = runMlProxyGuards(request, "skill_gap", ROUTE);
+  if (guard.response) return guard.response;
+  const context = guard.context;
+
   try {
     const body = await request.json();
 
-    const res = await fetch(`${ML_SERVICE_URL}/api/v1/skill-gap/analyze`, {
+    const res = await fetch(`${getMlServiceUrl()}/api/v1/skill-gap/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: buildMlUpstreamHeaders(
+        request,
+        context.clientIp,
+        "application/json",
+      ),
       body: JSON.stringify(body),
+      cache: "no-store",
     });
 
     if (!res.ok) {
-      const error = await res.text();
-      return NextResponse.json(
-        { error: `ML service error: ${error}` },
-        { status: res.status }
+      const response = await proxyUpstreamError(res);
+      logMlProxyResult(
+        context,
+        ROUTE,
+        "skill_gap",
+        response.status,
+        response.status === 429,
+        "upstream_error",
       );
+      return response;
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    const response = NextResponse.json(data);
+    logMlProxyResult(context, ROUTE, "skill_gap", 200, false, "ok");
+    return response;
   } catch (error) {
     console.error("ML skill-gap analyze proxy error:", error);
-    return NextResponse.json(
-      { error: "ML service unavailable" },
+    const response = NextResponse.json(
+      { error: "ml_unavailable", message: "ML service unavailable" },
       { status: 503 }
     );
+    logMlProxyResult(context, ROUTE, "skill_gap", 503, true, "exception");
+    return response;
   }
 }

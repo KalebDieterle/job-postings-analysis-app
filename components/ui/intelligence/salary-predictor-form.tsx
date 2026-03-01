@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +84,14 @@ interface SalaryMetadataResponse {
   company_scale_tiers: SalaryMetadataTier[];
 }
 
+interface MetadataCacheEntry {
+  expiresAtMs: number;
+  payload: SalaryMetadataResponse;
+}
+
+const METADATA_DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
+const METADATA_QUERY_TTL_MS = 15 * 60 * 1000;
+
 export function SalaryPredictorForm() {
   const [title, setTitle] = useState("");
   const [titleOpen, setTitleOpen] = useState(false);
@@ -108,10 +116,52 @@ export function SalaryPredictorForm() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [error, setError] = useState("");
+  const metadataCacheRef = useRef<Map<string, MetadataCacheEntry>>(new Map());
+  const inflightMetadataRef = useRef<Map<string, Promise<SalaryMetadataResponse | null>>>(new Map());
 
   const selectedTitleExactMatch = useMemo(
     () => titleSuggestions.some((t) => t.title.toLowerCase() === titleQuery.trim().toLowerCase()),
     [titleSuggestions, titleQuery],
+  );
+
+  const fetchMetadata = useCallback(
+    async (query: string, limit: number): Promise<SalaryMetadataResponse | null> => {
+      const normalizedQuery = query.trim().toLowerCase();
+      const cacheKey = `${normalizedQuery}|${limit}`;
+      const now = Date.now();
+      const ttlMs = normalizedQuery.length > 0 ? METADATA_QUERY_TTL_MS : METADATA_DEFAULT_TTL_MS;
+
+      const cached = metadataCacheRef.current.get(cacheKey);
+      if (cached && cached.expiresAtMs > now) {
+        return cached.payload;
+      }
+
+      const inflight = inflightMetadataRef.current.get(cacheKey);
+      if (inflight) return inflight;
+
+      const promise = (async () => {
+        try {
+          const path = normalizedQuery
+            ? `/api/ml/salary/metadata?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}`
+            : `/api/ml/salary/metadata?limit=${limit}`;
+          const res = await fetch(path);
+          if (!res.ok) return null;
+
+          const payload = (await res.json()) as SalaryMetadataResponse;
+          metadataCacheRef.current.set(cacheKey, {
+            payload,
+            expiresAtMs: Date.now() + ttlMs,
+          });
+          return payload;
+        } finally {
+          inflightMetadataRef.current.delete(cacheKey);
+        }
+      })();
+
+      inflightMetadataRef.current.set(cacheKey, promise);
+      return promise;
+    },
+    [],
   );
 
   useEffect(() => {
@@ -119,10 +169,8 @@ export function SalaryPredictorForm() {
 
     const loadMetadata = async () => {
       try {
-        const res = await fetch("/api/ml/salary/metadata?limit=60");
-        if (!res.ok) throw new Error("Failed to load salary metadata");
-
-        const data = (await res.json()) as SalaryMetadataResponse;
+        const data = await fetchMetadata("", 60);
+        if (!data) throw new Error("Failed to load salary metadata");
         if (cancelled) return;
 
         setAvailableSkills(Array.isArray(data.skills) ? data.skills : []);
@@ -157,7 +205,7 @@ export function SalaryPredictorForm() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fetchMetadata]);
 
   useEffect(() => {
     if (!titleOpen) return;
@@ -167,30 +215,32 @@ export function SalaryPredictorForm() {
       setTitleSuggestions(defaultTitles.slice(0, 15));
       return;
     }
+    if (trimmed.length < 2) {
+      setTitleSuggestions(defaultTitles.slice(0, 15));
+      return;
+    }
 
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/ml/salary/metadata?q=${encodeURIComponent(trimmed.toLowerCase())}&limit=15`,
-        );
-        if (!res.ok) return;
-        const data = (await res.json()) as SalaryMetadataResponse;
-        if (!cancelled && Array.isArray(data.titles)) {
+        const data = await fetchMetadata(trimmed, 15);
+        if (!cancelled && data && Array.isArray(data.titles)) {
           setTitleSuggestions(data.titles);
+        } else if (!cancelled) {
+          setTitleSuggestions([]);
         }
       } catch {
         if (!cancelled) {
           setTitleSuggestions([]);
         }
       }
-    }, 180);
+    }, 450);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [titleOpen, titleQuery, defaultTitles]);
+  }, [titleOpen, titleQuery, defaultTitles, fetchMetadata]);
 
   const toggleSkill = (skillAbr: string) => {
     setSelectedSkills((prev) =>
