@@ -50,7 +50,7 @@ export default function RootLayout({
                     useQueryStates and useQueryState hooks.
                 */}
                 <div className="flex-1 overflow-y-auto overflow-x-hidden">
-                  <div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-6">
+                  <div className="px-4 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-6">
                     {children}
                   </div>
                 </div>

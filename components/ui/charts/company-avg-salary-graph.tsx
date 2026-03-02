@@ -12,6 +12,7 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
+import { formatCurrencyCompact, truncateAxisLabel } from "@/lib/chart-formatters";
 
 // Data structure for the chart points
 interface CompanyData {
@@ -126,7 +127,7 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
       </div>
 
       {/* Chart Canvas */}
-      <div className="h-125">
+      <div className="h-[420px] w-full md:h-[500px]" role="img" aria-label="Company salary comparison chart">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -144,9 +145,10 @@ export const CompanyAvgSalaryGraph: React.FC<CompanyAvgSalaryGraphProps> = ({
               textAnchor="end"
               interval={0}
               height={80}
+              tickFormatter={(value) => truncateAxisLabel(String(value), 16)}
             />
             <YAxis
-              tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+              tickFormatter={(val) => formatCurrencyCompact(Number(val))}
               tick={{ fontSize: 11, fill: "#64748b" }}
             />
             <Tooltip

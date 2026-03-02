@@ -275,13 +275,40 @@ export function CompaniesFilterBar() {
                 disabled={activeFiltersCount === 0}
               >
                 <RotateCcw className="h-4 w-4" />
-                Reset All Filters
+                Reset filters
               </Button>
-              <div className="text-sm text-muted-foreground">
-                {activeFiltersCount > 0 && (
-                  <span>{activeFiltersCount} active filter(s)</span>
-                )}
-              </div>
+              {activeFiltersCount > 0 && (
+                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                  {filters.q ? (
+                    <Badge variant="secondary" className="gap-1">
+                      Search: {filters.q}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() =>
+                          startTransition(() => {
+                            setFilters({ q: "", page: 1 });
+                            setSearchInput("");
+                          })
+                        }
+                      />
+                    </Badge>
+                  ) : null}
+                  {filters.location ? (
+                    <Badge variant="secondary" className="gap-1">
+                      Location: {filters.location}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() =>
+                          startTransition(() => {
+                            setFilters({ location: "", page: 1 });
+                          })
+                        }
+                      />
+                    </Badge>
+                  ) : null}
+                  <span className="self-center">{activeFiltersCount} active filters</span>
+                </div>
+              )}
             </div>
           </CollapsibleContent>
         </Collapsible>

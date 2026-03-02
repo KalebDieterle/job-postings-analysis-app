@@ -57,27 +57,8 @@ export default async function RoleDetailPage({ params }: PageProps) {
     getRoleGrowth(title),
   ]);
 
-  // Handle Empty State
   if (jobs.length === 0) {
-    return (
-      <MobilePageShell className="space-y-8 pt-2 md:pt-4">
-        <Link href="/roles">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-2 -ml-2 text-muted-foreground"
-          >
-            <ChevronLeft className="h-4 w-4" /> Back to All Roles
-          </Button>
-        </Link>
-        <div className="text-center py-20 border-2 border-dashed rounded-2xl bg-slate-50/50">
-          <h1 className="mb-2 text-2xl font-bold md:text-3xl">{title}</h1>
-          <p className="text-muted-foreground">
-            No active job postings found for this role in the current dataset.
-          </p>
-        </div>
-      </MobilePageShell>
-    );
+    notFound();
   }
 
   // Derived Insight Data

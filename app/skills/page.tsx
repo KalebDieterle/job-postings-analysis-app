@@ -109,7 +109,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
     return `/skills?${params.toString()}`;
   };
 
-  const totalSkills = skillsData.length;
+  const pageResultCount = skillsData.length;
 
   return (
     <>
@@ -181,13 +181,9 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
               </span>{" "}
               to{" "}
               <span className="font-bold text-slate-900 dark:text-white">
-                {Math.min(page * limit, (page - 1) * limit + totalSkills)}
+                {(page - 1) * limit + pageResultCount}
               </span>{" "}
-              of{" "}
-              <span className="font-bold text-slate-900 dark:text-white">
-                {totalSkills}
-              </span>{" "}
-              skills
+              skills on page {page}
             </p>
             <PaginationControls
               currentPage={page}

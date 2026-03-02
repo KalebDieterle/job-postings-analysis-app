@@ -97,7 +97,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
           remotePercentage={remotePercentage}
         />
 
-        {/* Market Pulse — synthesized insights */}
+        {/* Market Pulse - synthesized insights */}
         <MarketInsightsBar
           highestPayingRole={salaryInsights.highestRole}
           highestSalary={salaryInsights.highestSalary}
@@ -146,7 +146,9 @@ export default async function RolesPage({ searchParams }: PageProps) {
 
         {/* Pagination Controls */}
         <div className="flex flex-col gap-3 border-t border-slate-200 py-6 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm text-slate-500">Page {filters.page ?? 1}</div>
+          <div className="text-sm text-slate-500">
+            Showing up to {roles.length} roles on page {filters.page ?? 1}
+          </div>
           <PaginationControls
             currentPage={Number(filters.page ?? 1)}
             hasNextPage={roles.length === 20}
@@ -168,7 +170,7 @@ export default async function RolesPage({ searchParams }: PageProps) {
           />
         </div>
 
-        {/* Deep Analytics — filter-aware */}
+        {/* Deep Analytics - filter-aware */}
         <div className="mt-4 space-y-6">
           <div>
             <h2 className="text-2xl font-bold">Detailed Analytics</h2>

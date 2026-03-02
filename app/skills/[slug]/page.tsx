@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { notFound } from "next/navigation";
 
 interface TopEmployer {
   name: string | null;
@@ -27,6 +28,10 @@ export default async function SkillDetailPage({
     getSkillDetails(decodedName),
     getSkillTrendingData(decodedName),
   ]);
+
+  if (details.count === 0 && trendingData.length === 0) {
+    notFound();
+  }
 
   return (
     <MobilePageShell>
@@ -79,7 +84,7 @@ export default async function SkillDetailPage({
           <CardTitle>Hiring Volume Over Time</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-87.5">
+          <div className="h-[300px] md:h-[350px]">
             <SkillTimelineChart data={trendingData} />
           </div>
         </CardContent>

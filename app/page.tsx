@@ -1,6 +1,7 @@
 import Header from "../components/ui/Header";
 import {
   getTrendingSkills,
+  getTrendingStats,
   getTotalStats,
   getIndustryBreakdown,
   getTopHiringCompanies,
@@ -23,6 +24,8 @@ import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 // Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
 export const revalidate = 1800;
 
+type ComparisonMode = "contiguous" | "fallback" | "none";
+
 export default async function Home() {
   // Fetch all data in parallel
   const [
@@ -33,6 +36,7 @@ export default async function Home() {
     recentPostings,
     experienceData,
     trendingSkillsRaw,
+    trendingStats,
   ] = await Promise.all([
     getTotalStats(),
     getIndustryBreakdown(),
@@ -40,15 +44,22 @@ export default async function Home() {
     getSalaryInsights(),
     getRecentPostings(),
     getExperienceDistribution(),
-    getTrendingSkills(30, 10),
+    getTrendingSkills(7, 10),
+    getTrendingStats(7),
   ]);
 
   // Format trending skills for the enhanced chart
   const trendingSkills = trendingSkillsRaw.map((s: any) => ({
     skill_name: s.name ?? s.skill_name ?? "",
-    current_count: s.current_count ?? s.currentCount ?? 0,
-    previous_count: s.previous_count ?? s.previousCount ?? 0,
+    current_count: Number(s.current_count ?? s.currentCount ?? 0),
+    previous_count: Number(s.previous_count ?? s.previousCount ?? 0),
     growth_rate: Number(s.growth_percentage ?? s.growthRate ?? 0),
+    comparison_mode:
+      s.comparison_mode === "contiguous" ||
+      s.comparison_mode === "fallback" ||
+      s.comparison_mode === "none"
+        ? (s.comparison_mode as ComparisonMode)
+        : trendingStats.comparisonMode,
   }));
 
   return (
@@ -79,7 +90,10 @@ export default async function Home() {
 
         {/* Enhanced Trending Skills */}
         <section>
-          <EnhancedTrendingSkills data={trendingSkills} />
+          <EnhancedTrendingSkills
+            data={trendingSkills}
+            comparisonMode={trendingStats.comparisonMode}
+          />
         </section>
 
         {/* Two Column Layout - Companies & Recent Activity */}

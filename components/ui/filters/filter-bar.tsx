@@ -170,6 +170,24 @@ export function FilterBar() {
                       />
                     </Badge>
                   ) : null}
+                  {filters.experience.length > 0 ? (
+                    <Badge variant="secondary" className="gap-1">
+                      {filters.experience.join(", ")}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => setFilters({ experience: [], page: 1 })}
+                      />
+                    </Badge>
+                  ) : null}
+                  {filters.minSalary > 0 ? (
+                    <Badge variant="secondary" className="gap-1">
+                      Min ${filters.minSalary.toLocaleString()}
+                      <X
+                        className="h-3 w-3 cursor-pointer"
+                        onClick={() => setFilters({ minSalary: 0, page: 1 })}
+                      />
+                    </Badge>
+                  ) : null}
                 </div>
               ) : null}
             </div>

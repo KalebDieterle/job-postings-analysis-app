@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, TrendingUp, DollarSign } from "lucide-react";
+import { Clock, TrendingUp, DollarSign, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TIMEFRAMES = [
@@ -21,8 +21,10 @@ export function TrendingFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const currentTimeframe = searchParams.get("timeframe") || "30";
+  const currentTimeframe = searchParams.get("timeframe") || "7";
   const currentMetric = searchParams.get("sortBy") || "demand";
+  const activeFiltersCount =
+    (currentTimeframe !== "7" ? 1 : 0) + (currentMetric !== "demand" ? 1 : 0);
 
   const updateFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -30,8 +32,16 @@ export function TrendingFilters() {
     router.push(`/trends?${params.toString()}`);
   };
 
+  const resetFilters = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("timeframe", "7");
+    params.set("sortBy", "demand");
+    router.push(`/trends?${params.toString()}`);
+  };
+
   return (
-    <div className="flex flex-col gap-4 md:flex-row md:items-center">
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center">
       {/* Timeframe Filter */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -86,6 +96,23 @@ export function TrendingFilters() {
             );
           })}
         </div>
+      </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {activeFiltersCount > 0 && (
+          <Badge variant="secondary">{activeFiltersCount} active filters</Badge>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={resetFilters}
+          disabled={activeFiltersCount === 0}
+          className="gap-2"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Reset
+        </Button>
       </div>
     </div>
   );

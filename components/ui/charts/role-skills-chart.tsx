@@ -11,6 +11,7 @@ import {
   Cell,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCompactNumber, truncateAxisLabel } from "@/lib/chart-formatters";
 
 interface SkillData {
   skill_name: string;
@@ -42,14 +43,16 @@ export function RoleSkillsChart({ data, roleTitle }: RoleSkillsChartProps) {
         <CardTitle>Top Skills for {roleTitle}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={data} layout="vertical" margin={{ left: 100 }}>
-            <XAxis type="number" />
+        <div className="h-[320px] w-full md:h-[400px]" role="img" aria-label={`Top skills chart for ${roleTitle}`}>
+          <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ left: 100, right: 20, top: 8, bottom: 8 }}>
+            <XAxis type="number" tickFormatter={(value) => formatCompactNumber(Number(value))} />
             <YAxis
               type="category"
               dataKey="skill_name"
               width={90}
               tick={{ fontSize: 12 }}
+              tickFormatter={(value) => truncateAxisLabel(String(value), 14)}
             />
             <Tooltip
               content={({ active, payload }) => {
@@ -78,6 +81,7 @@ export function RoleSkillsChart({ data, roleTitle }: RoleSkillsChartProps) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

@@ -1,0 +1,65 @@
+﻿name: QA Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      QA_BASE_URL: http://127.0.0.1:3100
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Start app
+        run: |
+          npm run start -- --port 3100 > /tmp/next-start.log 2>&1 &
+          echo $! > /tmp/next-start.pid
+
+      - name: Wait for app
+        run: |
+          for i in {1..45}; do
+            if curl -fsS "$QA_BASE_URL" > /dev/null; then
+              echo "App is up"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "App failed to start"
+          cat /tmp/next-start.log
+          exit 1
+
+      - name: QA full
+        run: BASE_URL=$QA_BASE_URL npm run qa:full
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f /tmp/next-start.pid ]; then
+            kill "$(cat /tmp/next-start.pid)" || true
+          fi
+          cat /tmp/next-start.log || true
+

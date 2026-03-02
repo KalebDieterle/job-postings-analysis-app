@@ -18,6 +18,13 @@ const canonicalRole = (titleCol: any) =>
 
 const VALID_ANNUAL_SALARY_MIN = 20_000;
 const VALID_ANNUAL_SALARY_MAX = 500_000;
+type TrendComparisonMode = 'contiguous' | 'fallback' | 'none';
+type TrendComparisonDateRange = ReturnType<typeof buildAnchoredTimeframeWindow> & {
+  comparisonMode: TrendComparisonMode;
+};
+
+const isRemoteAllowed = (column: unknown) =>
+  sql`LOWER(COALESCE(${column}::text, '')) IN ('1', '1.0', 'true', 't')`;
 
 function validAnnualSalaryFilter(alias: string): ReturnType<typeof sql.raw> {
   return sql.raw(`
@@ -49,6 +56,57 @@ async function getMostRecentDateRange(days: number = 30) {
     : new Date();
 
   return buildAnchoredTimeframeWindow(mostRecentDate, days);
+}
+
+async function getComparisonDateRange(days: number = 30): Promise<TrendComparisonDateRange> {
+  const baseRange = await getMostRecentDateRange(days);
+
+  const contiguousCoverage = await db.execute<{ count: number }>(sql`
+    SELECT COUNT(*)::int as count
+    FROM ${postings}
+    WHERE ${postings.listed_time} >= ${baseRange.previousStartDate.toISOString()}::timestamp
+      AND ${postings.listed_time} < ${baseRange.previousEndDate.toISOString()}::timestamp
+  `);
+
+  if (Number(contiguousCoverage.rows[0]?.count ?? 0) > 0) {
+    return { ...baseRange, comparisonMode: 'contiguous' };
+  }
+
+  const fallbackAnchor = await db.execute<{ fallback_anchor: string | null }>(sql`
+    SELECT MAX(${postings.listed_time})::text as fallback_anchor
+    FROM ${postings}
+    WHERE ${postings.listed_time} < ${baseRange.startDate.toISOString()}::timestamp
+  `);
+
+  const fallbackAnchorDate = fallbackAnchor.rows[0]?.fallback_anchor
+    ? new Date(fallbackAnchor.rows[0].fallback_anchor)
+    : null;
+
+  if (!fallbackAnchorDate) {
+    return { ...baseRange, comparisonMode: 'none' };
+  }
+
+  // Build a same-length previous window ending at the most recent pre-current snapshot.
+  const fallbackEndExclusive = new Date(fallbackAnchorDate.getTime() + 1);
+  const fallbackWindow = buildAnchoredTimeframeWindow(fallbackEndExclusive, days);
+
+  const fallbackCoverage = await db.execute<{ count: number }>(sql`
+    SELECT COUNT(*)::int as count
+    FROM ${postings}
+    WHERE ${postings.listed_time} >= ${fallbackWindow.startDate.toISOString()}::timestamp
+      AND ${postings.listed_time} < ${fallbackWindow.endDate.toISOString()}::timestamp
+  `);
+
+  if (Number(fallbackCoverage.rows[0]?.count ?? 0) === 0) {
+    return { ...baseRange, comparisonMode: 'none' };
+  }
+
+  return {
+    ...baseRange,
+    previousStartDate: fallbackWindow.startDate,
+    previousEndDate: fallbackWindow.endDate,
+    comparisonMode: 'fallback',
+  };
 }
 
 // ===========================
@@ -919,7 +977,7 @@ export async function getCompanyJobStats(companyName: string) {
           THEN ${postings.yearly_min_salary}
         END
       )`,
-      remote_count: sql<number>`SUM(CASE WHEN ${postings.remote_allowed} IN ('1', 'true') THEN 1 ELSE 0 END)::int`,
+      remote_count: sql<number>`SUM(CASE WHEN ${isRemoteAllowed(postings.remote_allowed)} THEN 1 ELSE 0 END)::int`,
     })
     .from(postings)
     .where(eq(postings.company_name, companyName));
@@ -1067,8 +1125,7 @@ export async function getJobsByLocation() {
       companyCount: sql<number>`count(distinct ${postings.company_id})`.as('company_count'),
       avgMinSalary: sql<number>`avg(${postings.yearly_min_salary}) filter (where ${postings.yearly_min_salary} > 0)`.as('avg_min_salary'),
       avgMaxSalary: sql<number>`avg(${postings.yearly_max_salary}) filter (where ${postings.yearly_max_salary} > 0)`.as('avg_max_salary'),
-      // Fix: Compare text to string '1' or 'true'
-      remoteCount: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as('remote_count'),
+      remoteCount: sql<number>`count(*) filter (where ${isRemoteAllowed(postings.remote_allowed)})`.as('remote_count'),
     })
     .from(postings)
     .leftJoin(companies, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
@@ -1133,7 +1190,7 @@ export async function getJobsByCity() {
         end
       ))::int`,
       remoteRatio: sql<number>`(
-        count(*) FILTER (WHERE ${postings.remote_allowed} IN ('1', 'true'))::float / NULLIF(count(*), 0)
+        count(*) FILTER (WHERE ${isRemoteAllowed(postings.remote_allowed)})::float / NULLIF(count(*), 0)
       )`,
     })
     .from(postings)
@@ -1296,7 +1353,9 @@ export async function getJobsByCityFiltered(params: {
           end
         ))::int AS avg_salary,
         (
-          count(*) FILTER (WHERE parsed.remote_allowed IN ('1', 'true'))::float / NULLIF(count(*), 0)
+          count(*) FILTER (
+            WHERE LOWER(COALESCE(parsed.remote_allowed::text, '')) IN ('1', '1.0', 'true', 't')
+          )::float / NULLIF(count(*), 0)
         ) AS remote_ratio
       FROM parsed
       LEFT JOIN ${companies}
@@ -1445,8 +1504,7 @@ export async function getLocationStats(locationSlug: string) {
             then ${postings.yearly_min_salary}
         end
       ))`.as("avg_med_salary"),
-      // Fix: Robust string comparison
-      remoteJobs: sql<number>`count(*) filter (where ${postings.remote_allowed} IN ('1', 'true'))`.as("remote_jobs"),
+      remoteJobs: sql<number>`count(*) filter (where ${isRemoteAllowed(postings.remote_allowed)})`.as("remote_jobs"),
       totalViews: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.views}, ''), '0') AS numeric)) AS bigint))`.as("total_views"),
       totalApplies: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.applies}, ''), '0') AS numeric)) AS bigint))`.as("total_applies"),
     })
@@ -1548,13 +1606,18 @@ export async function getTrendingSkills(
     : 10;
   const safeSortBy = sortBy === 'salary' ? 'salary' : 'demand';
 
-  const { startDate, endDate, previousStartDate, previousEndDate } =
-    await getMostRecentDateRange(days);
+  const { startDate, endDate, previousStartDate, previousEndDate, comparisonMode } =
+    await getComparisonDateRange(days);
+  const isComparable = comparisonMode === 'contiguous';
 
   const orderByClause =
-    safeSortBy === 'salary'
-      ? sql.raw('salary_change DESC, growth_percentage DESC, current_count DESC')
-      : sql.raw('growth_percentage DESC, current_count DESC, salary_change DESC');
+    isComparable
+      ? safeSortBy === 'salary'
+        ? sql.raw('salary_change DESC, growth_percentage DESC, current_count DESC')
+        : sql.raw('growth_percentage DESC, current_count DESC, salary_change DESC')
+      : safeSortBy === 'salary'
+        ? sql.raw('current_salary DESC, current_count DESC')
+        : sql.raw('current_count DESC, current_salary DESC');
 
   const result = await db.execute<{
     name: string;
@@ -1565,6 +1628,7 @@ export async function getTrendingSkills(
     growth_percentage: number;
     salary_change: number;
     trend_status: 'breakout' | 'rising' | 'falling';
+    comparison_mode: TrendComparisonMode;
   }>(sql`
     WITH current_period AS (
       SELECT 
@@ -1602,15 +1666,19 @@ export async function getTrendingSkills(
       c.median_salary as current_salary,
       COALESCE(p.median_salary, 0)::float as previous_salary,
       CASE 
+        WHEN ${isComparable} = false THEN 0.0
         WHEN COALESCE(p.count, 0) = 0 THEN 100.0
         ELSE ROUND(((c.count - COALESCE(p.count, 0))::float / GREATEST(p.count, 1)::float * 100)::numeric, 1)
       END as growth_percentage,
       ROUND((c.median_salary - COALESCE(p.median_salary, 0))::numeric, 0) as salary_change,
       CASE
+        WHEN ${isComparable} = false AND c.count > COALESCE(p.count, 0) THEN 'rising'
+        WHEN ${isComparable} = false THEN 'falling'
         WHEN COALESCE(p.count, 0) = 0 AND c.count > 10 THEN 'breakout'
         WHEN c.count > COALESCE(p.count, 0) THEN 'rising'
         ELSE 'falling'
-      END as trend_status
+      END as trend_status,
+      ${comparisonMode}::text as comparison_mode
     FROM current_period c
     LEFT JOIN previous_period p ON c.name = p.name
     ORDER BY ${orderByClause}
@@ -1636,8 +1704,9 @@ function getSkillCategorySql() {
 
 export async function getTrendingStats(timeframe: number = 30) {
   const days = normalizeTimeframeDays(timeframe);
-  const { startDate, endDate, previousStartDate, previousEndDate } =
-    await getMostRecentDateRange(days);
+  const { startDate, endDate, previousStartDate, previousEndDate, comparisonMode } =
+    await getComparisonDateRange(days);
+  const isComparable = comparisonMode === 'contiguous';
 
   const result = await db.execute<{
     top_gainer: string | null;
@@ -1703,15 +1772,23 @@ export async function getTrendingStats(timeframe: number = 30) {
   `);
 
   const row = result.rows[0];
+  const previousEndDisplay = new Date(previousEndDate.getTime() - 1);
 
   return {
-    topGainer: row?.top_gainer ?? 'No Data',
-    topGainerGrowth: Number(row?.top_gainer_growth ?? 0),
-    avgGrowth: Number(row?.avg_growth ?? 0),
+    topGainer: isComparable ? row?.top_gainer ?? 'No Data' : 'N/A',
+    topGainerGrowth: isComparable ? Number(row?.top_gainer_growth ?? 0) : 0,
+    avgGrowth: isComparable ? Number(row?.avg_growth ?? 0) : 0,
     highestSalaryJump: row?.highest_salary_jump ?? 'No Data',
     highestSalaryIncrease: Number(row?.highest_salary_increase ?? 0),
     newEntries: Number(row?.new_entries ?? 0),
     dataAsOf: row?.max_date ?? 'N/A',
+    comparisonMode,
+    comparisonWindow: {
+      currentStart: startDate.toISOString().slice(0, 10),
+      currentEnd: endDate.toISOString().slice(0, 10),
+      previousStart: previousStartDate.toISOString().slice(0, 10),
+      previousEnd: previousEndDisplay.toISOString().slice(0, 10),
+    },
   };
 }
 
@@ -1851,7 +1928,9 @@ export async function getRemotePercentage(
   const query = db.execute<{ total: number; remote: number }>(sql`
     SELECT
       COUNT(*)::int as total,
-      COUNT(*) FILTER (WHERE p.remote_allowed = '1.0')::int as remote
+      COUNT(*) FILTER (
+        WHERE LOWER(COALESCE(p.remote_allowed::text, '')) IN ('1', '1.0', 'true', 't')
+      )::int as remote
     FROM ${postings} p
     LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
     ${conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``}
@@ -2853,34 +2932,58 @@ export async function getCompaniesHeroStats() {
     .orderBy(desc(sql`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${postings.yearly_min_salary})`))
     .limit(1);
 
-  console.log('🔍 Hero Stats - Highest Paying:', highestPaying[0]);
-
-  // Most active industry - FIXED: Use company_name JOIN via companies table
-  const topIndustry = await db
+  // Most active industry from job_industries coverage (best overlap with live postings)
+  const topIndustryFromJobs = await db
     .select({
-      industry: company_industries.industry,
+      industry: industries.industry_name,
       count: sql<number>`count(distinct ${postings.job_id})::int`,
     })
-    .from(company_industries)
-    .innerJoin(companies, eq(company_industries.company_id, companies.company_id))
-    .innerJoin(postings, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
-    .where(isNotNull(company_industries.industry))
-    .groupBy(company_industries.industry)
+    .from(job_industries)
+    .innerJoin(postings, eq(job_industries.job_id, postings.job_id))
+    .innerJoin(industries, eq(job_industries.industry_id, industries.industry_id))
+    .where(isNotNull(industries.industry_name))
+    .groupBy(industries.industry_name)
     .orderBy(desc(sql`count(distinct ${postings.job_id})`))
     .limit(1);
 
-  console.log('🔍 Hero Stats - Top Industry:', topIndustry[0]);
+  // Fallback for environments where job_industries is not populated
+  const topIndustryFromTopCompanies = await db.execute<{
+    industry: string | null;
+    count: number;
+  }>(sql`
+    SELECT
+      tc.industry as industry,
+      COUNT(DISTINCT p.job_id)::int as count
+    FROM ${top_companies} tc
+    INNER JOIN ${postings} p
+      ON LOWER(TRIM(tc.name)) = LOWER(TRIM(p.company_name))
+    WHERE tc.industry IS NOT NULL
+      AND tc.industry <> ''
+    GROUP BY tc.industry
+    ORDER BY count DESC
+    LIMIT 1
+  `);
+
+  const topIndustry = topIndustryFromJobs[0]
+    ? {
+        industry: topIndustryFromJobs[0].industry,
+        count: Number(topIndustryFromJobs[0].count ?? 0),
+      }
+    : topIndustryFromTopCompanies.rows[0]
+      ? {
+          industry: topIndustryFromTopCompanies.rows[0].industry ?? "N/A",
+          count: Number(topIndustryFromTopCompanies.rows[0].count ?? 0),
+        }
+      : null;
 
   const stats = {
     totalCompanies: totalCompanies[0]?.count || 0,
     avgPostings: avgPostingsValue,
     highestPayingCompany: highestPaying[0]?.name || 'N/A',
     highestPayingSalary: highestPaying[0]?.median_salary || highestPaying[0]?.avg_salary || 0,
-    mostActiveIndustry: topIndustry[0]?.industry || 'N/A',
-    mostActiveIndustryCount: topIndustry[0]?.count || 0,
+    mostActiveIndustry: topIndustry?.industry || 'N/A',
+    mostActiveIndustryCount: topIndustry?.count || 0,
   };
-
-  console.log('📊 Complete Hero Stats:', stats);
 
   return stats;
 }

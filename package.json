@@ -34,7 +34,10 @@
     "migrate:company-ids": "tsx scripts/migrate-company-ids.ts",
     "migrate:company-ids:dry-run": "MIGRATE_COMPANY_IDS_DRY_RUN=true tsx scripts/migrate-company-ids.ts",
     "apply:company-id-migration:dry-run": "APPLY_MIGRATION_DRY_RUN=true tsx scripts/apply-company-id-migration.ts",
-    "apply:company-id-migration": "tsx scripts/apply-company-id-migration.ts"
+    "apply:company-id-migration": "tsx scripts/apply-company-id-migration.ts",
+    "qa:smoke": "tsx scripts/qa/smoke-routes.ts && tsx scripts/qa/smoke-query-params.ts && tsx scripts/qa/smoke-api.ts",
+    "qa:data": "tsx scripts/qa/data-integrity.ts",
+    "qa:full": "npm run qa:smoke && npm run qa:data"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

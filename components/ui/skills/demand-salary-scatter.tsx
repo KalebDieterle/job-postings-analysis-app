@@ -14,6 +14,7 @@ import {
   ZAxis,
 } from "recharts";
 import { useRouter } from "next/navigation";
+import { formatCompactNumber, formatCurrencyCompact } from "@/lib/chart-formatters";
 
 interface SkillDataPoint {
   name: string;
@@ -71,7 +72,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
         </p>
       </CardHeader>
       <CardContent>
-        <div className="h-[500px] w-full">
+        <div className="h-[420px] w-full md:h-[500px]" role="img" aria-label="Demand versus salary scatter chart">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 20, right: 20, bottom: 60, left: 60 }}>
               <CartesianGrid
@@ -90,6 +91,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
                 }}
                 className="text-xs"
                 tick={{ fill: "currentColor" }}
+                tickFormatter={(value) => formatCompactNumber(Number(value))}
               />
               <YAxis
                 type="number"
@@ -104,6 +106,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
                 }}
                 className="text-xs"
                 tick={{ fill: "currentColor" }}
+                tickFormatter={(value) => formatCurrencyCompact(Number(value))}
               />
               <ZAxis type="number" dataKey="z" range={[50, 400]} />
               <Tooltip
@@ -120,7 +123,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
                           Demand: {data.demand.toLocaleString()} jobs
                         </p>
                         <p className="text-xs text-slate-600 dark:text-slate-400">
-                          Salary: ${(data.salary / 1000).toFixed(0)}k
+                          Salary: {formatCurrencyCompact(data.salary)}
                         </p>
                         {data.growth && (
                           <p className="text-xs text-slate-600 dark:text-slate-400">

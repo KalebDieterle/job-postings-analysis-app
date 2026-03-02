@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     searchParams,
     "timeframe",
     ["7", "30", "90"] as const,
-    "30",
+    "7",
   );
   if ("error" in timeframeResult) {
     return NextResponse.json({ error: timeframeResult.error }, { status: 400 });

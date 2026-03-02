@@ -188,7 +188,7 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
             <span className="font-bold text-slate-900 dark:text-white">
               {offset + companies.length}
             </span>{" "}
-            of many companies
+            companies on page {page}
           </p>
           <PaginationControls
             currentPage={page}

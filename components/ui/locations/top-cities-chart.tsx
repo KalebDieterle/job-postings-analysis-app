@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { formatCompactNumber, truncateAxisLabel } from "@/lib/chart-formatters";
 
 interface TopCitiesChartProps {
   data: Array<{
@@ -25,7 +26,6 @@ interface TopCitiesChartProps {
   }>;
 }
 
-// Custom Tooltip Component
 interface CustomTooltipProps extends TooltipProps<number, string> {
   active?: boolean;
   payload?: Array<{
@@ -81,13 +81,11 @@ export function TopCitiesChart({ data }: TopCitiesChartProps) {
   const router = useRouter();
   const topCities = data.slice(0, 10);
 
-  // Generate gradient colors from blue to purple
   const generateColor = (index: number, total: number) => {
-    // Interpolate between blue and purple
     const ratio = index / (total - 1);
-    const r = Math.round(59 + (139 - 59) * ratio); // 59 (blue) to 139 (purple)
-    const g = Math.round(130 - (130 - 92) * ratio); // 130 to 92
-    const b = Math.round(246 - (246 - 246) * ratio); // 246 to 246
+    const r = Math.round(59 + (139 - 59) * ratio);
+    const g = Math.round(130 - (130 - 92) * ratio);
+    const b = Math.round(246 - (246 - 246) * ratio);
     return `rgb(${r}, ${g}, ${b})`;
   };
 
@@ -97,8 +95,8 @@ export function TopCitiesChart({ data }: TopCitiesChartProps) {
     fill: generateColor(index, topCities.length),
   }));
 
-  const handleBarClick = (data: any) => {
-    if (data && data.slug) {
+  const handleBarClick = (data: { slug?: string }) => {
+    if (data?.slug) {
       router.push(`/locations/${data.slug}`);
     }
   };
@@ -119,70 +117,73 @@ export function TopCitiesChart({ data }: TopCitiesChartProps) {
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart
-            data={chartData}
-            layout="vertical"
-            margin={{ left: 20, right: 30, top: 5, bottom: 5 }}
-          >
-            <defs>
-              {chartData.map((entry, index) => (
-                <linearGradient
-                  key={`gradient-${index}`}
-                  id={`gradient-${index}`}
-                  x1="0"
-                  y1="0"
-                  x2="1"
-                  y2="0"
-                >
-                  <stop offset="0%" stopColor={entry.fill} stopOpacity={0.8} />
-                  <stop offset="100%" stopColor={entry.fill} stopOpacity={1} />
-                </linearGradient>
-              ))}
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="rgb(148 163 184)"
-              opacity={0.2}
-              horizontal={true}
-              vertical={false}
-            />
-            <XAxis
-              type="number"
-              className="text-xs"
-              tick={{ fill: "rgb(148 163 184)" }}
-              stroke="rgb(148 163 184)"
-              tickFormatter={(value) => value.toLocaleString()}
-            />
-            <YAxis
-              dataKey="displayName"
-              type="category"
-              width={150}
-              className="text-sm"
-              tick={{ fill: "rgb(148 163 184)" }}
-              stroke="rgb(148 163 184)"
-            />
-            <Tooltip
-              content={<CustomTooltip />}
-              cursor={{ fill: "transparent" }}
-            />
-            <Bar
-              dataKey="jobCount"
-              radius={[0, 8, 8, 0]}
-              animationDuration={800}
-              className="cursor-pointer"
-              onClick={handleBarClick}
+        <div className="h-[340px] w-full md:h-[400px]" role="img" aria-label="Top cities jobs bar chart">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ left: 20, right: 30, top: 5, bottom: 5 }}
             >
-              {chartData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={`url(#gradient-${index})`}
-                  className="hover:opacity-80 transition-opacity"
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+              <defs>
+                {chartData.map((entry, index) => (
+                  <linearGradient
+                    key={`gradient-${index}`}
+                    id={`gradient-${index}`}
+                    x1="0"
+                    y1="0"
+                    x2="1"
+                    y2="0"
+                  >
+                    <stop offset="0%" stopColor={entry.fill} stopOpacity={0.8} />
+                    <stop offset="100%" stopColor={entry.fill} stopOpacity={1} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="rgb(148 163 184)"
+                opacity={0.2}
+                horizontal={true}
+                vertical={false}
+              />
+              <XAxis
+                type="number"
+                className="text-xs"
+                tick={{ fill: "rgb(148 163 184)" }}
+                stroke="rgb(148 163 184)"
+                tickFormatter={(value) => formatCompactNumber(Number(value))}
+              />
+              <YAxis
+                dataKey="displayName"
+                type="category"
+                width={150}
+                className="text-sm"
+                tick={{ fill: "rgb(148 163 184)" }}
+                stroke="rgb(148 163 184)"
+                tickFormatter={(value) => truncateAxisLabel(String(value), 20)}
+              />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ fill: "transparent" }}
+              />
+              <Bar
+                dataKey="jobCount"
+                radius={[0, 8, 8, 0]}
+                animationDuration={800}
+                className="cursor-pointer"
+                onClick={handleBarClick}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={`url(#gradient-${index})`}
+                    className="hover:opacity-80 transition-opacity"
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
         <p className="text-xs text-muted-foreground text-center mt-4">
           Click on any bar to explore detailed insights for that location
         </p>
@@ -190,3 +191,4 @@ export function TopCitiesChart({ data }: TopCitiesChartProps) {
     </Card>
   );
 }
+

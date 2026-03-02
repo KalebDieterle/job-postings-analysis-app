@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatGrowthPercentage } from "@/lib/utils";
 import { getCategoryColors } from "@/lib/skill-helpers";
 
 interface TrendingSkillCardProps {
@@ -23,6 +23,7 @@ interface TrendingSkillCardProps {
   currentSalary: number;
   trendStatus: "rising" | "falling" | "breakout";
   category?: string;
+  showGrowth?: boolean;
   /** Optional sparkline data points */
   chartData?: number[];
 }
@@ -35,6 +36,7 @@ export function TrendingSkillCard({
   currentSalary,
   trendStatus,
   category = "Tools & Platforms",
+  showGrowth = true,
   chartData,
 }: TrendingSkillCardProps) {
   const colors = getCategoryColors(category);
@@ -83,14 +85,17 @@ export function TrendingSkillCard({
         </div>
 
         {/* Growth Percentage Badge */}
-        {trendStatus !== "breakout" && (
+        {showGrowth && trendStatus !== "breakout" && (
           <span className={cn("gap-1 font-semibold", trendBadgeClass)}>
             {isPositive ? (
               <ArrowUpRight className="h-3 w-3" />
             ) : (
               <ArrowDownRight className="h-3 w-3" />
             )}
-            {Math.abs(growthPercentage).toFixed(1)}%
+            {formatGrowthPercentage(growthPercentage, {
+              decimals: 1,
+              showSign: false,
+            })}
           </span>
         )}
       </div>

@@ -22,6 +22,7 @@ import { Suspense } from "react";
 import { categorizeSkill } from "@/lib/skill-helpers";
 import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
+import { formatGrowthPercentage } from "@/lib/utils";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -70,8 +71,8 @@ async function TrendingContent({
   const rawTimeframe =
     typeof parsedParams.timeframe === "string"
       ? Number.parseInt(parsedParams.timeframe, 10)
-      : 30;
-  const timeframe = [7, 30, 90].includes(rawTimeframe) ? rawTimeframe : 30;
+      : 7;
+  const timeframe = [7, 30, 90].includes(rawTimeframe) ? rawTimeframe : 7;
   const sortBy =
     parsedParams.sortBy === "salary" || parsedParams.sortBy === "demand"
       ? parsedParams.sortBy
@@ -84,15 +85,40 @@ async function TrendingContent({
 
   // Transform snake_case to camelCase for UI
   const trendingSkills = trendingSkillsRaw.map((s) => ({
-    name: s.name,
-    currentCount: s.current_count,
-    previousCount: s.previous_count,
-    currentSalary: s.current_salary,
-    previousSalary: s.previous_salary,
-    growthPercentage: s.growth_percentage,
-    salaryChange: s.salary_change,
+    name: String(s.name ?? ""),
+    currentCount: Number(s.current_count ?? 0),
+    previousCount: Number(s.previous_count ?? 0),
+    currentSalary: Number(s.current_salary ?? 0),
+    previousSalary: Number(s.previous_salary ?? 0),
+    growthPercentage: Number(s.growth_percentage ?? 0),
+    salaryChange: Number(s.salary_change ?? 0),
     trendStatus: s.trend_status,
+    comparisonMode: s.comparison_mode ?? stats.comparisonMode,
   }));
+  const showPercentGrowth = stats.comparisonMode === "contiguous";
+  const comparisonWindow = stats.comparisonWindow;
+  const currentWindowText = comparisonWindow
+    ? `${comparisonWindow.currentStart} to ${comparisonWindow.currentEnd}`
+    : "current window";
+  const previousWindowText = comparisonWindow
+    ? `${comparisonWindow.previousStart} to ${comparisonWindow.previousEnd}`
+    : "previous window";
+
+  const comparisonMessage =
+    stats.comparisonMode === "fallback"
+      ? `Detected a data gap between ${previousWindowText} and ${currentWindowText}. Percent growth is hidden for this timeframe because windows are not contiguous.`
+      : stats.comparisonMode === "none"
+        ? `Trends for ${currentWindowText} are shown without a valid earlier baseline. Percent growth is unavailable for this timeframe.`
+        : `Trends compare ${currentWindowText} against the prior ${timeframe}-day window (${previousWindowText}), anchored to the latest posting date.`;
+
+  const topGainerTrend =
+    !showPercentGrowth
+      ? "N/A"
+      : formatGrowthPercentage(stats.topGainerGrowth, { decimals: 1 });
+  const marketMomentumValue =
+    !showPercentGrowth
+      ? "N/A"
+      : formatGrowthPercentage(stats.avgGrowth, { decimals: 1 });
 
   // Separate breakout skills from regular trending
   const breakoutSkills = trendingSkills.filter(
@@ -111,9 +137,7 @@ async function TrendingContent({
           <div className="space-y-1">
             <p className="font-semibold">Window Comparison</p>
             <p className="text-sm text-muted-foreground">
-              Trends compare the most recent <strong>{timeframe}-day</strong>{" "}
-              window against the prior <strong>{timeframe}-day</strong> window,
-              anchored to the latest posting date in the dataset.
+              {comparisonMessage}
             </p>
           </div>
         </div>
@@ -138,13 +162,13 @@ async function TrendingContent({
           label="Top Gainer"
           value={stats.topGainer}
           icon={TrendingUp}
-          trend={`+${stats.topGainerGrowth.toFixed(1)}%`}
-          trendUp={true}
+          trend={topGainerTrend}
+          trendUp={showPercentGrowth}
           className="bento-card-featured glow-success"
         />
         <StatCard
           label="Market Momentum"
-          value={`+${stats.avgGrowth.toFixed(1)}%`}
+          value={marketMomentumValue}
           icon={Target}
         />
         <StatCard
@@ -200,6 +224,7 @@ async function TrendingContent({
                   currentSalary={skill.currentSalary}
                   trendStatus={skill.trendStatus}
                   category={categorizeSkill(skill.name)}
+                  showGrowth={showPercentGrowth}
                 />
               </Link>
             ))}
@@ -240,6 +265,7 @@ async function TrendingContent({
                   currentSalary={skill.currentSalary}
                   trendStatus={skill.trendStatus}
                   category={categorizeSkill(skill.name)}
+                  showGrowth={showPercentGrowth}
                 />
               </Link>
             ))}

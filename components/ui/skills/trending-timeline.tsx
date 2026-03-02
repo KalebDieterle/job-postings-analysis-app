@@ -12,7 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { format, parseISO } from "date-fns";
+import { formatChartDate, formatCompactNumber, truncateAxisLabel } from "@/lib/chart-formatters";
 
 interface TimelineDataPoint {
   skill_name: string;
@@ -58,7 +58,7 @@ export function TrendingTimeline({ data, skillNames }: TrendingTimelineProps) {
     return Array.from(dateMap.entries())
       .map(([day, skills]) => ({
         day,
-        date: format(parseISO(day), "MMM dd"),
+        date: formatChartDate(day),
         ...skills,
       }))
       .sort((a, b) => a.day.localeCompare(b.day));
@@ -86,7 +86,7 @@ export function TrendingTimeline({ data, skillNames }: TrendingTimelineProps) {
         </p>
       </CardHeader>
       <CardContent>
-        <div className="h-[400px] w-full">
+        <div className="h-[360px] w-full md:h-[400px]" role="img" aria-label="Trending skills timeline">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={transformedData}
@@ -100,10 +100,12 @@ export function TrendingTimeline({ data, skillNames }: TrendingTimelineProps) {
                 dataKey="date"
                 className="text-xs"
                 tick={{ fill: "currentColor" }}
+                tickFormatter={(value) => truncateAxisLabel(String(value), 10)}
               />
               <YAxis
                 className="text-xs"
                 tick={{ fill: "currentColor" }}
+                tickFormatter={(value) => formatCompactNumber(Number(value))}
                 label={{
                   value: "Job Postings",
                   angle: -90,

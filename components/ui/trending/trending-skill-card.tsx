@@ -13,7 +13,7 @@ import {
   ArrowDownRight,
   Sparkles,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatGrowthPercentage } from "@/lib/utils";
 import { getCategoryColors } from "@/lib/skill-helpers";
 
 interface TrendingSkillCardProps {
@@ -24,6 +24,7 @@ interface TrendingSkillCardProps {
   currentSalary: number;
   trendStatus: "rising" | "falling" | "breakout";
   category?: string;
+  showGrowth?: boolean;
 }
 
 export function TrendingSkillCard({
@@ -34,9 +35,11 @@ export function TrendingSkillCard({
   currentSalary,
   trendStatus,
   category = "Tools & Platforms",
+  showGrowth = true,
 }: TrendingSkillCardProps) {
   const colors = getCategoryColors(category);
   const isPositive = growthPercentage > 0;
+  const effectiveGrowth = showGrowth ? growthPercentage : 0;
   const formattedSalary =
     currentSalary > 0 ? `$${Math.round(currentSalary / 1000)}k` : "N/A";
   const formattedSalaryChange = Math.abs(Math.round(salaryChange / 1000));
@@ -73,7 +76,7 @@ export function TrendingSkillCard({
           </div>
 
           {/* Growth Percentage Badge */}
-          {trendStatus !== "breakout" && (
+          {showGrowth && trendStatus !== "breakout" && (
             <Badge
               variant="outline"
               className={cn(
@@ -88,7 +91,10 @@ export function TrendingSkillCard({
               ) : (
                 <ArrowDownRight className="h-3 w-3" />
               )}
-              {Math.abs(growthPercentage).toFixed(1)}%
+              {formatGrowthPercentage(growthPercentage, {
+                decimals: 1,
+                showSign: false,
+              })}
             </Badge>
           )}
         </div>
@@ -151,7 +157,12 @@ export function TrendingSkillCard({
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Growth Momentum</span>
             <span className="font-semibold">
-              {Math.abs(growthPercentage).toFixed(0)}%
+              {showGrowth
+                ? formatGrowthPercentage(growthPercentage, {
+                    decimals: 0,
+                    showSign: false,
+                  })
+                : "N/A"}
             </span>
           </div>
           <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -163,7 +174,7 @@ export function TrendingSkillCard({
                   : "bg-linear-to-r from-red-400 to-orange-500",
               )}
               style={{
-                width: `${Math.min(Math.abs(growthPercentage), 100)}%`,
+                width: `${Math.min(Math.abs(effectiveGrowth), 100)}%`,
               }}
             />
           </div>
