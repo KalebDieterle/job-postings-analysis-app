@@ -47,13 +47,6 @@ def _load_models(model_dir: str) -> dict:
         "salary_company_scale_meta",
         "salary_titles",
         "salary_premiums",
-        "tfidf_vectorizer",
-        "tfidf_matrix",
-        "tfidf_role_index",
-        "cluster_labels",
-        "cluster_tsne",
-        "cluster_role_index",
-        "cluster_feature_matrix",
     ):
         path = base / f"{name}.joblib"
         if path.exists():

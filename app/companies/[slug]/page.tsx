@@ -5,6 +5,10 @@ import { notFound } from "next/navigation";
 import {
   getCompanyBySlug,
   getCompanyJobStats,
+  getCompanyPostingsTimeSeries,
+  getCompanyLocationDistribution,
+  getCompanyExperienceLevels,
+  getCompanySalaryDistribution,
   getCompanyTopRoles,
   getCompanyTopSkills,
   getCompanyRecentPostings,
@@ -24,6 +28,19 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
+function formatMonthLabel(month: string) {
+  const [yearPart, monthPart] = month.split("-");
+  const year = Number(yearPart);
+  const monthIndex = Number(monthPart) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    return month;
+  }
+  return new Date(Date.UTC(year, monthIndex, 1)).toLocaleString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default async function CompanySlugPage({ params }: PageProps) {
   const { slug } = await params;
   let company;
@@ -39,12 +56,80 @@ export default async function CompanySlugPage({ params }: PageProps) {
     notFound();
   }
 
-  const [jobStats, topRoles, topSkills, recentJobs] = await Promise.all([
+  const [
+    jobStats,
+    topRoles,
+    topSkills,
+    recentJobs,
+    postingsTimelineRaw,
+    locationDistributionRaw,
+    experienceLevelsRaw,
+    salaryDistributionRaw,
+  ] = await Promise.all([
     getCompanyJobStats(company.name),
     getCompanyTopRoles(company.name),
     getCompanyTopSkills(company.name),
     getCompanyRecentPostings(company.name),
+    getCompanyPostingsTimeSeries(company.name),
+    getCompanyLocationDistribution(company.name),
+    getCompanyExperienceLevels(company.name),
+    getCompanySalaryDistribution(company.name),
   ]);
+
+  const postingsTimeline = postingsTimelineRaw
+    .map((row) => ({
+      month: String(row.month ?? ""),
+      count: Number(row.count ?? 0),
+    }))
+    .filter((row) => row.month.length > 0)
+    .slice(-12);
+
+  const latestTimelinePoint = postingsTimeline[postingsTimeline.length - 1];
+  const previousTimelinePoint = postingsTimeline[postingsTimeline.length - 2];
+  const momentumDelta =
+    previousTimelinePoint && Number(previousTimelinePoint.count) > 0
+    ? ((latestTimelinePoint?.count ?? 0) - Number(previousTimelinePoint?.count ?? 0)) /
+      Number(previousTimelinePoint?.count ?? 1)
+    : null;
+
+  const locationDistribution = locationDistributionRaw.map((row) => ({
+    location: String(row.location ?? "Unknown"),
+    count: Number(row.count ?? 0),
+  }));
+  const totalLocationPostings = locationDistribution.reduce(
+    (sum, row) => sum + row.count,
+    0,
+  );
+  const maxLocationCount = Math.max(
+    ...locationDistribution.map((row) => row.count),
+    1,
+  );
+
+  const experienceLevels = experienceLevelsRaw.map((row) => ({
+    level: String(row.experience_level ?? "Not specified"),
+    count: Number(row.count ?? 0),
+  }));
+  const totalExperienceCount = experienceLevels.reduce(
+    (sum, row) => sum + row.count,
+    0,
+  );
+  const maxExperienceCount = Math.max(
+    ...experienceLevels.map((row) => row.count),
+    1,
+  );
+
+  const salaryDistribution = salaryDistributionRaw.map((row) => ({
+    range: String(row.salary_range ?? "Unknown"),
+    count: Number(row.count ?? 0),
+  }));
+  const totalSalaryBucketCount = salaryDistribution.reduce(
+    (sum, row) => sum + row.count,
+    0,
+  );
+  const maxSalaryRangeCount = Math.max(
+    ...salaryDistribution.map((row) => row.count),
+    1,
+  );
 
   const remotePercent = jobStats.total_postings
     ? Math.round(
@@ -143,6 +228,191 @@ export default async function CompanySlugPage({ params }: PageProps) {
               {remotePercent !== null ? `${remotePercent}%` : "N/A"}
             </div>
             <div className="mt-1 text-sm text-emerald-400">Remote-friendly roles</div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="rounded-xl border bg-card">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-lg">Hiring Momentum (12 Months)</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Monthly posting volume for {company.name}
+            </p>
+            {latestTimelinePoint ? (
+              <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm">
+                <span className="rounded-full bg-muted px-3 py-1">
+                  Latest: {formatMonthLabel(latestTimelinePoint.month)} (
+                  {latestTimelinePoint.count.toLocaleString()})
+                </span>
+                <span
+                  className={`rounded-full px-3 py-1 ${
+                    momentumDelta === null
+                      ? "bg-muted text-muted-foreground"
+                      : momentumDelta >= 0
+                        ? "bg-emerald-500/10 text-emerald-500"
+                        : "bg-amber-500/10 text-amber-500"
+                  }`}
+                >
+                  {momentumDelta === null
+                    ? "No previous month baseline"
+                    : `MoM ${
+                        momentumDelta >= 0 ? "+" : ""
+                      }${(momentumDelta * 100).toFixed(1)}%`}
+                </span>
+              </div>
+            ) : null}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {postingsTimeline.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No monthly posting data is available yet.
+              </p>
+            ) : (
+              postingsTimeline.map((point) => {
+                const widthPct =
+                  latestTimelinePoint && latestTimelinePoint.count > 0
+                    ? Math.max(
+                        (point.count / latestTimelinePoint.count) * 100,
+                        4,
+                      )
+                    : 4;
+                return (
+                  <div key={point.month} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{formatMonthLabel(point.month)}</span>
+                      <span>{point.count.toLocaleString()}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary/70"
+                        style={{ width: `${Math.min(widthPct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border bg-card">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-lg">Location Footprint</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Top hiring locations by posting share
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {locationDistribution.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No location distribution data is available.
+              </p>
+            ) : (
+              locationDistribution.map((row) => {
+                const widthPct = Math.max((row.count / maxLocationCount) * 100, 4);
+                const sharePct =
+                  totalLocationPostings > 0
+                    ? (row.count / totalLocationPostings) * 100
+                    : 0;
+                return (
+                  <div key={row.location} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="truncate pr-3">{row.location}</span>
+                      <span>
+                        {row.count.toLocaleString()} ({sharePct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-sky-500/70"
+                        style={{ width: `${Math.min(widthPct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border bg-card">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-lg">Experience Mix</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Experience-level demand distribution
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {experienceLevels.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No experience-level data is available.
+              </p>
+            ) : (
+              experienceLevels.map((row) => {
+                const widthPct = Math.max((row.count / maxExperienceCount) * 100, 4);
+                const sharePct =
+                  totalExperienceCount > 0
+                    ? (row.count / totalExperienceCount) * 100
+                    : 0;
+                return (
+                  <div key={row.level} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="truncate pr-3">{row.level}</span>
+                      <span>
+                        {row.count.toLocaleString()} ({sharePct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-violet-500/70"
+                        style={{ width: `${Math.min(widthPct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border bg-card">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-lg">Salary Band Profile</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Distribution of jobs by annual salary range
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {salaryDistribution.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No salary-range distribution data is available.
+              </p>
+            ) : (
+              salaryDistribution.map((row) => {
+                const widthPct = Math.max((row.count / maxSalaryRangeCount) * 100, 4);
+                const sharePct =
+                  totalSalaryBucketCount > 0
+                    ? (row.count / totalSalaryBucketCount) * 100
+                    : 0;
+                return (
+                  <div key={row.range} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{row.range}</span>
+                      <span>
+                        {row.count.toLocaleString()} ({sharePct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-emerald-500/70"
+                        style={{ width: `${Math.min(widthPct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </CardContent>
         </Card>
       </section>

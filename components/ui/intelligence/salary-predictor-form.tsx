@@ -112,6 +112,7 @@ export function SalaryPredictorForm() {
     FALLBACK_COMPANY_SCALE_TIERS,
   );
   const [metadataLoading, setMetadataLoading] = useState(true);
+  const [metadataDegraded, setMetadataDegraded] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
@@ -145,9 +146,16 @@ export function SalaryPredictorForm() {
             ? `/api/ml/salary/metadata?q=${encodeURIComponent(normalizedQuery)}&limit=${limit}`
             : `/api/ml/salary/metadata?limit=${limit}`;
           const res = await fetch(path);
+          const isDegraded = res.headers.get("x-ml-degraded") === "1";
+          if (isDegraded) {
+            setMetadataDegraded(true);
+          }
           if (!res.ok) return null;
 
           const payload = (await res.json()) as SalaryMetadataResponse;
+          if ((payload as { degraded?: unknown }).degraded === true) {
+            setMetadataDegraded(true);
+          }
           metadataCacheRef.current.set(cacheKey, {
             payload,
             expiresAtMs: Date.now() + ttlMs,
@@ -281,8 +289,8 @@ export function SalaryPredictorForm() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Prediction failed");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || data?.error || "Prediction failed");
       }
 
       const data = await res.json();
@@ -303,6 +311,13 @@ export function SalaryPredictorForm() {
           <CardTitle>Job Parameters</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          {metadataDegraded && (
+            <div className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Salary metadata is temporarily degraded. Predictions still work, but
+              title and skill suggestions may be limited.
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="title-combobox">Job Title</Label>
             <Popover

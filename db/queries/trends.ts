@@ -1,1 +1,5 @@
-export { getTrendingSkills, getTrendingStats } from "./shared";
+export {
+  getTrendingSkills,
+  getTrendingStats,
+  getSourceCountrySegmentation,
+} from "./shared";

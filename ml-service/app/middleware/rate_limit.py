@@ -13,7 +13,7 @@ from app.config import settings
 from app.middleware.common import get_client_ip, hash_identifier
 
 WINDOW_SECONDS = 60 * 60
-HEAVY_ENDPOINTS = {"predict", "skill_gap"}
+HEAVY_ENDPOINTS = {"predict"}
 
 
 @dataclass
@@ -106,8 +106,6 @@ infer_semaphore = asyncio.Semaphore(max(1, settings.ml_max_concurrent_infer))
 def classify_endpoint(method: str, path: str) -> str:
     if method == "POST" and path == "/api/v1/salary/predict":
         return "predict"
-    if method == "POST" and path == "/api/v1/skill-gap/analyze":
-        return "skill_gap"
     if method == "GET" and path == "/api/v1/salary/metadata":
         return "metadata"
     return "lookup"
@@ -116,8 +114,6 @@ def classify_endpoint(method: str, path: str) -> str:
 def endpoint_limit_for(endpoint_class: str) -> int:
     if endpoint_class == "predict":
         return settings.ml_limit_predict_per_hour
-    if endpoint_class == "skill_gap":
-        return settings.ml_limit_skill_gap_per_hour
     if endpoint_class == "metadata":
         return settings.ml_limit_metadata_per_hour
     return settings.ml_limit_lookup_per_hour

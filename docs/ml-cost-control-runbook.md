@@ -4,6 +4,10 @@ This runbook is for the deployed ML stack:
 - Next.js proxy on Vercel (`/api/ml/*`)
 - FastAPI ML service on Fly (`/api/v1/*`)
 
+Retired ML endpoints:
+- `/api/ml/clusters*`, `/api/ml/skill-gap*` return `410` from Next.js.
+- `/api/v1/clusters*`, `/api/v1/skill-gap*` return `410` from FastAPI.
+
 ## Required Environment Variables
 
 ### Vercel (web app)
@@ -19,7 +23,6 @@ This runbook is for the deployed ML stack:
 - `ML_MAX_CONCURRENT_INFER=2`
 - `ML_DISABLE_HEAVY_INFERENCE=false`
 - `ML_LIMIT_PREDICT_PER_HOUR=40`
-- `ML_LIMIT_SKILL_GAP_PER_HOUR=20`
 - `ML_LIMIT_METADATA_PER_HOUR=180`
 - `ML_LIMIT_LOOKUP_PER_HOUR=240`
 - `ML_LIMIT_GLOBAL_PER_HOUR=400`
@@ -29,7 +32,7 @@ This runbook is for the deployed ML stack:
 1. Open Fly dashboard and record month-to-date spend.
 2. Review recent ML logs for:
 - high 429 volume by a single IP hash
-- high request volume on `salary/predict` and `skill-gap/analyze`
+- high request volume on `salary/predict`
 3. If spend trend is too high:
 - reduce Vercel soft limits first (route classes)
 - then reduce Fly hard limits by 20%
@@ -45,7 +48,6 @@ Set on Fly:
 
 Effect:
 - Blocks `POST /api/v1/salary/predict`
-- Blocks `POST /api/v1/skill-gap/analyze`
 - Keeps metadata and lookup endpoints available
 
 ### Disable ML proxy entirely

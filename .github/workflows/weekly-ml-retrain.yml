@@ -35,7 +35,7 @@ jobs:
         working-directory: ml-service
         run: pip install -r requirements.txt
 
-      - name: Train all models
+      - name: Train salary models
         working-directory: ml-service/training
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -43,7 +43,7 @@ jobs:
         run: |
           echo "::add-mask::$DATABASE_URL"
           echo "Starting training at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          python train_all.py
+          python train_salary.py
 
       - name: Verify model artifacts
         working-directory: ml-service
@@ -53,6 +53,53 @@ jobs:
           # Check that critical files exist
           test -f models/salary_median.lgb || (echo "Missing salary_median.lgb" && exit 1)
           test -f models/salary_encoders.joblib || (echo "Missing salary_encoders.joblib" && exit 1)
+
+      - name: Enforce salary-only model artifacts
+        working-directory: ml-service
+        run: |
+          set -euo pipefail
+
+          # Legacy artifacts must not exist.
+          if ls models/tfidf_* models/cluster_* >/dev/null 2>&1; then
+            echo "Legacy TF-IDF/cluster artifacts detected in models/."
+            ls -la models/tfidf_* models/cluster_* 2>/dev/null || true
+            exit 1
+          fi
+
+          # Model file changes in this run must stay within the salary allowlist.
+          mapfile -t changed_model_paths < <(git status --porcelain -- models/ | awk '{print $2}')
+          if [ "${#changed_model_paths[@]}" -eq 0 ]; then
+            echo "No model file changes detected."
+            exit 0
+          fi
+
+          allowed_paths=(
+            "models/salary_median.lgb"
+            "models/salary_p10.lgb"
+            "models/salary_p90.lgb"
+            "models/salary_encoders.joblib"
+            "models/salary_feature_columns.joblib"
+            "models/salary_skill_vocab.joblib"
+            "models/salary_company_scale_meta.joblib"
+            "models/salary_titles.joblib"
+            "models/salary_premiums.joblib"
+          )
+
+          for changed_path in "${changed_model_paths[@]}"; do
+            is_allowed=false
+            for allowed_path in "${allowed_paths[@]}"; do
+              if [ "$changed_path" = "$allowed_path" ]; then
+                is_allowed=true
+                break
+              fi
+            done
+
+            if [ "$is_allowed" = false ]; then
+              echo "Disallowed model file change detected: $changed_path"
+              echo "Only salary allowlist artifacts may change in this workflow."
+              exit 1
+            fi
+          done
 
       - name: Deploy to Fly.io
         if: success()

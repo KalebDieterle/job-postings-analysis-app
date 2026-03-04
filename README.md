@@ -164,16 +164,20 @@ If you deploy to a platform other than Vercel, ensure Node 18+ and the same envi
 
 ### ML Deployment (Vercel + Fly)
 
-The ML features are served by a separate FastAPI service (`ml-service/`) and proxied through Next route handlers:
+The ML feature set is salary-only and is served by a separate FastAPI service (`ml-service/`) proxied through Next route handlers:
 - Deploy `ml-service/` to Fly (or equivalent)
 - Set `ML_SERVICE_URL` in Vercel to the ML service base URL
 - Set `ML_SERVICE_KEY` on both Vercel and Fly to the same shared secret
+
+Retired endpoints:
+- Next.js: `/api/ml/clusters*`, `/api/ml/skill-gap*` return `410`
+- FastAPI: `/api/v1/clusters*`, `/api/v1/skill-gap*` return `410`
 
 Cost controls implemented in this repo:
 - Proxy-side soft rate limits on `/api/ml/*`
 - ML service hard rate limits per endpoint class + global
 - Optional heavy-inference kill switch
-- Manual-trigger ML widgets on role pages
+- Salary metadata degradation fallback on proxy errors
 
 Operational guide:
 - `docs/ml-cost-control-runbook.md`

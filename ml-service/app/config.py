@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     ml_max_concurrent_infer: int = 2
     ml_disable_heavy_inference: bool = False
     ml_limit_predict_per_hour: int = 40
-    ml_limit_skill_gap_per_hour: int = 20
     ml_limit_metadata_per_hour: int = 180
     ml_limit_lookup_per_hour: int = 240
     ml_limit_global_per_hour: int = 400

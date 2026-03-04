@@ -17,7 +17,7 @@ interface PredictionResult {
   lower_bound: number;
   upper_bound: number;
   confidence: number;
-  factors: { feature: string; importance: number }[];
+  factors?: { feature: string; importance: number }[];
   adjustments?: { source: string; delta: number }[];
 }
 
@@ -25,45 +25,77 @@ function formatSalary(value: number) {
   return `$${(value / 1000).toFixed(0)}k`;
 }
 
-function ConfidenceBar({ result }: { result: PredictionResult }) {
-  const { lower_bound, upper_bound, predicted_salary } = result;
-  const range = upper_bound - lower_bound;
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value !== "number") return null;
+  if (!Number.isFinite(value)) return null;
+  return value;
+}
+
+function ConfidenceBar({
+  lowerBound,
+  upperBound,
+  predictedSalary,
+}: {
+  lowerBound: number | null;
+  upperBound: number | null;
+  predictedSalary: number | null;
+}) {
+  if (
+    lowerBound === null ||
+    upperBound === null ||
+    predictedSalary === null ||
+    upperBound <= lowerBound
+  ) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Confidence interval unavailable for this prediction.
+      </p>
+    );
+  }
+
+  const range = upperBound - lowerBound;
   const padding = range * 0.1;
-  const min = lower_bound - padding;
-  const max = upper_bound + padding;
+  const min = lowerBound - padding;
+  const max = upperBound + padding;
   const totalRange = max - min;
 
-  const lowerPct = ((lower_bound - min) / totalRange) * 100;
-  const upperPct = ((upper_bound - min) / totalRange) * 100;
-  const predictedPct = ((predicted_salary - min) / totalRange) * 100;
+  if (totalRange <= 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Confidence interval unavailable for this prediction.
+      </p>
+    );
+  }
+
+  const lowerPct = ((lowerBound - min) / totalRange) * 100;
+  const upperPct = ((upperBound - min) / totalRange) * 100;
+  const predictedPct = ((predictedSalary - min) / totalRange) * 100;
 
   return (
     <div className="space-y-3">
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>P10: {formatSalary(lower_bound)}</span>
-        <span className="font-semibold text-foreground text-sm">
-          {formatSalary(predicted_salary)}
+        <span>P10: {formatSalary(lowerBound)}</span>
+        <span className="text-sm font-semibold text-foreground">
+          {formatSalary(predictedSalary)}
         </span>
-        <span>P90: {formatSalary(upper_bound)}</span>
+        <span>P90: {formatSalary(upperBound)}</span>
       </div>
-      <div className="relative h-8 rounded-full bg-muted overflow-hidden">
-        {/* P10-P90 range */}
+      <div className="relative h-8 overflow-hidden rounded-full bg-muted">
         <div
-          className="absolute top-0 bottom-0 rounded-full bg-gradient-to-r from-sky-400/60 via-sky-500/80 to-sky-400/60"
+          className="absolute bottom-0 top-0 rounded-full bg-gradient-to-r from-sky-400/60 via-sky-500/80 to-sky-400/60"
           style={{
             left: `${lowerPct}%`,
             width: `${upperPct - lowerPct}%`,
           }}
         />
-        {/* Predicted value marker */}
         <div
-          className="absolute top-0 bottom-0 w-1 bg-sky-600 shadow-md"
+          className="absolute bottom-0 top-0 w-1 bg-sky-600 shadow-md"
           style={{ left: `${predictedPct}%` }}
         />
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <div className="h-2 w-2 rounded-full bg-sky-500/70" />
-        <span>P10–P90 confidence interval</span>
+        <span>P10-P90 confidence interval</span>
         <div className="ml-2 h-3 w-0.5 bg-sky-600" />
         <span>Predicted median</span>
       </div>
@@ -76,26 +108,21 @@ function FactorsChart({
 }: {
   factors: { feature: string; importance: number }[];
 }) {
-  const data = factors.map((f) => ({
-    name: f.feature
+  const data = factors.map((factor) => ({
+    name: factor.feature
       .replace("skill_", "")
       .replace("ind_", "")
-      .replace("_", " "),
-    importance: Math.round(f.importance * 100),
+      .replace(/_/g, " "),
+    importance: Math.round(factor.importance * 100),
   }));
 
-  const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
   return (
     <ResponsiveContainer width="100%" height={160}>
       <BarChart data={data} layout="vertical" margin={{ left: 80, right: 20 }}>
         <XAxis type="number" hide />
-        <YAxis
-          type="category"
-          dataKey="name"
-          tick={{ fontSize: 12 }}
-          width={75}
-        />
+        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={75} />
         <Tooltip
           formatter={(value: number) => [`${value}%`, "Importance"]}
           contentStyle={{
@@ -106,8 +133,8 @@ function FactorsChart({
           }}
         />
         <Bar dataKey="importance" radius={[0, 4, 4, 0]}>
-          {data.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          {data.map((_, index) => (
+            <Cell key={index} fill={colors[index % colors.length]} />
           ))}
         </Bar>
       </BarChart>
@@ -140,59 +167,96 @@ export function SalaryPredictionResult({
   if (!result) {
     return (
       <Card className="flex items-center justify-center">
-        <CardContent className="text-center text-muted-foreground py-16">
+        <CardContent className="py-16 text-center text-muted-foreground">
           <p className="text-lg font-medium">No prediction yet</p>
-          <p className="text-sm mt-1">
-            Fill in the job parameters and click Predict
-          </p>
+          <p className="mt-1 text-sm">Fill in the job parameters and click Predict</p>
         </CardContent>
       </Card>
     );
   }
+
+  const predictedSalary = toFiniteNumber(result.predicted_salary);
+  const lowerBound = toFiniteNumber(result.lower_bound);
+  const upperBound = toFiniteNumber(result.upper_bound);
+  const confidence = toFiniteNumber(result.confidence);
+
+  const confidenceLabel =
+    confidence === null
+      ? "Confidence unavailable"
+      : `${Math.round(Math.max(0, Math.min(1, confidence)) * 100)}% confidence`;
+
+  const rangeLabel =
+    lowerBound !== null && upperBound !== null && upperBound >= lowerBound
+      ? `Range: ${formatSalary(lowerBound)} - ${formatSalary(upperBound)}`
+      : "Range unavailable";
+
+  const safeAdjustments = Array.isArray(result.adjustments)
+    ? result.adjustments.filter(
+        (adjustment): adjustment is { source: string; delta: number } =>
+          Boolean(adjustment) &&
+          typeof adjustment.source === "string" &&
+          typeof adjustment.delta === "number" &&
+          Number.isFinite(adjustment.delta),
+      )
+    : [];
+
+  const safeFactors = Array.isArray(result.factors)
+    ? result.factors.filter(
+        (factor): factor is { feature: string; importance: number } =>
+          Boolean(factor) &&
+          typeof factor.feature === "string" &&
+          typeof factor.importance === "number" &&
+          Number.isFinite(factor.importance),
+      )
+    : [];
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Predicted Salary</CardTitle>
-          <span className="text-xs text-muted-foreground rounded-full bg-muted px-2.5 py-1">
-            {Math.round(result.confidence * 100)}% confidence
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+            {confidenceLabel}
           </span>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="text-center">
           <p className="text-4xl font-bold tracking-tight text-sky-600">
-            {formatSalary(result.predicted_salary)}
+            {predictedSalary === null ? "N/A" : formatSalary(predictedSalary)}
           </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Range: {formatSalary(result.lower_bound)} –{" "}
-            {formatSalary(result.upper_bound)}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{rangeLabel}</p>
         </div>
 
-        <ConfidenceBar result={result} />
+        <ConfidenceBar
+          lowerBound={lowerBound}
+          upperBound={upperBound}
+          predictedSalary={predictedSalary}
+        />
 
-        {result.adjustments && result.adjustments.length > 0 && (
+        {safeAdjustments.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium">Applied Adjustments</h4>
             <div className="grid gap-2">
-              {result.adjustments.map((adj) => {
+              {safeAdjustments.map((adjustment, index) => {
                 const sourceLabel =
-                  adj.source === "skills"
+                  adjustment.source === "skills"
                     ? "Skill profile"
-                    : adj.source === "company_scale"
+                    : adjustment.source === "company_scale"
                       ? "Company scale"
-                      : adj.source;
-                const delta = adj.delta >= 0 ? `+$${adj.delta.toLocaleString()}` : `-$${Math.abs(adj.delta).toLocaleString()}`;
+                      : adjustment.source;
+                const delta =
+                  adjustment.delta >= 0
+                    ? `+$${adjustment.delta.toLocaleString()}`
+                    : `-$${Math.abs(adjustment.delta).toLocaleString()}`;
 
                 return (
                   <div
-                    key={`${adj.source}-${adj.delta}`}
+                    key={`${adjustment.source}-${adjustment.delta}-${index}`}
                     className="flex items-center justify-between rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm"
                   >
                     <span className="text-muted-foreground">{sourceLabel}</span>
-                    <span className={adj.delta >= 0 ? "text-emerald-500" : "text-amber-500"}>
+                    <span className={adjustment.delta >= 0 ? "text-emerald-500" : "text-amber-500"}>
                       {delta}
                     </span>
                   </div>
@@ -202,13 +266,18 @@ export function SalaryPredictionResult({
           </div>
         )}
 
-        {result.factors.length > 0 && (
+        {safeFactors.length > 0 ? (
           <div>
-            <h4 className="text-sm font-medium mb-3">Top Driving Factors</h4>
-            <FactorsChart factors={result.factors} />
+            <h4 className="mb-3 text-sm font-medium">Top Driving Factors</h4>
+            <FactorsChart factors={safeFactors} />
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No factor breakdown available for this prediction.
+          </p>
         )}
       </CardContent>
     </Card>
   );
 }
+

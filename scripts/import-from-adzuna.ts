@@ -79,19 +79,53 @@ const ADZUNA_DAILY_LIMIT = parseInt(process.env.ADZUNA_DAILY_LIMIT || '240', 10)
 /**
  * Check if database has required constraints
  */
-async function checkDatabaseConstraints(): Promise<boolean> {
+async function checkDatabaseConstraints(): Promise<{ ok: boolean; issues: string[] }> {
   try {
-    const result = await db.execute(sql`
-      SELECT constraint_name
-      FROM information_schema.table_constraints
-      WHERE table_name = 'companies'
-      AND constraint_type = 'PRIMARY KEY'
-    `);
+    const [companyPkResult, postingsConflictIndexResult] = await Promise.all([
+      db.execute(sql`
+        SELECT constraint_name
+        FROM information_schema.table_constraints
+        WHERE table_name = 'companies'
+        AND constraint_type = 'PRIMARY KEY'
+      `),
+      db.execute(sql`
+        SELECT EXISTS (
+          SELECT 1
+          FROM pg_class i
+          JOIN pg_index ix ON i.oid = ix.indexrelid
+          JOIN pg_class t ON t.oid = ix.indrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE n.nspname = 'public'
+            AND t.relname = 'postings'
+            AND ix.indisunique
+            AND i.relname = 'postings_external_id_source_country_idx'
+        ) AS "hasConflictTarget";
+      `),
+    ]);
 
-    return result.rows.length > 0;
-  } catch (error) {
-    console.error('⚠️  Warning: Could not check database constraints');
-    return true; // Proceed anyway
+    const issues: string[] = [];
+
+    if (companyPkResult.rows.length === 0) {
+      issues.push('`companies` table is missing a PRIMARY KEY constraint.');
+    }
+
+    const hasConflictTarget = Boolean(
+      (postingsConflictIndexResult.rows[0] as { hasConflictTarget?: boolean } | undefined)
+        ?.hasConflictTarget
+    );
+    if (!hasConflictTarget) {
+      issues.push(
+        '`postings` is missing a UNIQUE index/constraint on `(external_id, source, country)` required by ON CONFLICT.'
+      );
+    }
+
+    return { ok: issues.length === 0, issues };
+  } catch (error: any) {
+    console.error('⚠️  Could not verify database constraints:', error?.message ?? error);
+    return {
+      ok: false,
+      issues: ['Constraint preflight check failed; refusing to run import to avoid wasting API quota.'],
+    };
   }
 }
 
@@ -120,15 +154,16 @@ async function importFromAdzuna() {
 
   // Check database constraints
   console.log('🔍 Checking database constraints...');
-  const hasConstraints = await checkDatabaseConstraints();
-  if (!hasConstraints) {
-    console.error('\n❌ WARNING: Database constraints not found!');
-    console.error('   The companies table may not have proper constraints to prevent duplicates.');
-    console.error('   This could lead to duplicate company records.\n');
+  const constraintCheck = await checkDatabaseConstraints();
+  if (!constraintCheck.ok) {
+    console.error('\n❌ Required database constraints are missing or invalid.');
+    for (const issue of constraintCheck.issues) {
+      console.error(`   • ${issue}`);
+    }
+    console.error('');
     console.error('   Recommended actions:');
-    console.error('   1. Check for existing duplicates: npm run cleanup:companies:dry-run');
-    console.error('   2. Clean up duplicates: npm run cleanup:companies');
-    console.error('   3. Add constraints: npm run db:add-company-constraints\n');
+    console.error('   1. Apply production DB migrations: npm run db:migrate:production');
+    console.error('   2. Re-run this import after migration succeeds\n');
     console.error('   Then re-run this import.\n');
     process.exit(1);
   }

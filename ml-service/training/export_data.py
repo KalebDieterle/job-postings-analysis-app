@@ -126,58 +126,7 @@ def export_salary_skill_vocab() -> pd.DataFrame:
         conn.close()
 
 
-def export_tfidf_data() -> pd.DataFrame:
-    """Export descriptions grouped by canonical role for TF-IDF."""
-    query = """
-    SELECT
-        COALESCE(LOWER(ra.canonical_name), LOWER(p.title)) AS canonical_title,
-        STRING_AGG(p.description, ' ') AS combined_description,
-        COUNT(*) AS posting_count
-    FROM postings p
-    LEFT JOIN role_aliases ra ON LOWER(p.title) = LOWER(ra.alias)
-    WHERE p.description IS NOT NULL
-      AND LENGTH(p.description) > 100
-    GROUP BY COALESCE(LOWER(ra.canonical_name), LOWER(p.title))
-    HAVING COUNT(*) >= 3
-    ORDER BY COUNT(*) DESC
-    """
-    conn = get_connection()
-    try:
-        df = pd.read_sql(query, conn)
-        print(f"Exported {len(df)} roles for TF-IDF")
-        return df
-    finally:
-        conn.close()
-
-
-def export_skill_vectors() -> pd.DataFrame:
-    """Export skill multi-hot vectors per canonical role for clustering."""
-    query = """
-    SELECT
-        COALESCE(LOWER(ra.canonical_name), LOWER(p.title)) AS canonical_title,
-        js.skill_abr,
-        COUNT(*) AS freq
-    FROM postings p
-    LEFT JOIN role_aliases ra ON LOWER(p.title) = LOWER(ra.alias)
-    JOIN job_skills js ON p.job_id = js.job_id
-    GROUP BY COALESCE(LOWER(ra.canonical_name), LOWER(p.title)), js.skill_abr
-    """
-    conn = get_connection()
-    try:
-        df = pd.read_sql(query, conn)
-        print(f"Exported {len(df)} role-skill pairs")
-        return df
-    finally:
-        conn.close()
-
-
 if __name__ == "__main__":
     salary_df = export_salary_data()
     print(f"Salary data shape: {salary_df.shape}")
     print(f"Salary range: ${salary_df['yearly_min_salary'].min():,.0f} - ${salary_df['yearly_min_salary'].max():,.0f}")
-
-    tfidf_df = export_tfidf_data()
-    print(f"TF-IDF data shape: {tfidf_df.shape}")
-
-    skill_df = export_skill_vectors()
-    print(f"Skill vector data shape: {skill_df.shape}")

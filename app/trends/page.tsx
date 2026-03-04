@@ -1,16 +1,20 @@
 // Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
 export const revalidate = 1800;
 
-import { getTrendingSkills, getTrendingStats } from "@/db/queries";
+import {
+  getTrendingSkills,
+  getTrendingStats,
+  getSourceCountrySegmentation,
+} from "@/db/queries";
 import { TrendingSkillCard } from "@/components/ui/trending/trending-skill-card-v2";
 import { TrendingFilters } from "@/components/ui/trending/trending-filters";
+import { TrendsExportButton } from "@/components/ui/trending/trends-export-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
   Flame,
   ArrowUpRight,
-  Download,
   TrendingUp,
   Target,
   DollarSign,
@@ -78,9 +82,10 @@ async function TrendingContent({
       ? parsedParams.sortBy
       : "demand";
 
-  const [trendingSkillsRaw, stats] = await Promise.all([
+  const [trendingSkillsRaw, stats, segmentation] = await Promise.all([
     getTrendingSkills(timeframe, 24, sortBy),
     getTrendingStats(timeframe),
+    getSourceCountrySegmentation(timeframe),
   ]);
 
   // Transform snake_case to camelCase for UI
@@ -94,6 +99,7 @@ async function TrendingContent({
     salaryChange: Number(s.salary_change ?? 0),
     trendStatus: s.trend_status,
     comparisonMode: s.comparison_mode ?? stats.comparisonMode,
+    category: categorizeSkill(String(s.name ?? "")),
   }));
   const showPercentGrowth = stats.comparisonMode === "contiguous";
   const comparisonWindow = stats.comparisonWindow;
@@ -127,6 +133,26 @@ async function TrendingContent({
   const regularTrending = trendingSkills.filter(
     (s) => s.trendStatus !== "breakout",
   );
+  const sourceBreakdown = segmentation.sourceBreakdown;
+  const countryBreakdown = segmentation.countryBreakdown;
+  const maxSourceCount = Math.max(
+    ...sourceBreakdown.map((row) => row.postingCount),
+    1,
+  );
+  const maxCountryCount = Math.max(
+    ...countryBreakdown.map((row) => row.postingCount),
+    1,
+  );
+
+  const formatMoney = (value: number) =>
+    value > 0 ? `$${Math.round(value).toLocaleString()}` : "N/A";
+  const formatSourceLabel = (value: string) =>
+    value
+      .split(/[_-]/g)
+      .map((token) =>
+        token.length > 0 ? token[0].toUpperCase() + token.slice(1) : token,
+      )
+      .join(" ");
 
   return (
     <div className="space-y-8">
@@ -186,6 +212,89 @@ async function TrendingContent({
         />
       </div>
 
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold">Source Segmentation</h3>
+              <p className="text-sm text-muted-foreground">
+                Top posting sources in {segmentation.window.start} to{" "}
+                {segmentation.window.end}
+              </p>
+            </div>
+            <Badge variant="outline" className="glass-subtle border-0">
+              {segmentation.totalPostings.toLocaleString()} postings
+            </Badge>
+          </div>
+
+          {sourceBreakdown.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Source segmentation is not available for this window.
+            </p>
+          ) : (
+            sourceBreakdown.map((row) => (
+              <div key={row.source} className="space-y-1">
+                <div className="flex items-center justify-between gap-3 text-xs md:text-sm">
+                  <span className="font-medium">{formatSourceLabel(row.source)}</span>
+                  <span className="text-muted-foreground">
+                    {row.postingCount.toLocaleString()} ({row.sharePct.toFixed(1)}%) /{" "}
+                    {formatMoney(row.medianSalary)}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary/70"
+                    style={{
+                      width: `${Math.min(
+                        Math.max((row.postingCount / maxSourceCount) * 100, 4),
+                        100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="glass-card p-5 space-y-4">
+          <div>
+            <h3 className="text-lg font-bold">Country Segmentation</h3>
+            <p className="text-sm text-muted-foreground">
+              Leading countries by posting volume and salary baseline
+            </p>
+          </div>
+
+          {countryBreakdown.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Country segmentation is not available for this window.
+            </p>
+          ) : (
+            countryBreakdown.map((row) => (
+              <div key={row.country} className="space-y-1">
+                <div className="flex items-center justify-between gap-3 text-xs md:text-sm">
+                  <span className="font-medium">{row.country}</span>
+                  <span className="text-muted-foreground">
+                    {row.postingCount.toLocaleString()} ({row.sharePct.toFixed(1)}%) /{" "}
+                    {formatMoney(row.medianSalary)}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-emerald-500/70"
+                    style={{
+                      width: `${Math.min(
+                        Math.max((row.postingCount / maxCountryCount) * 100, 4),
+                        100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
       {/* Filters */}
       <div className="glass-card p-4">
         <TrendingFilters />
@@ -223,7 +332,7 @@ async function TrendingContent({
                   salaryChange={skill.salaryChange}
                   currentSalary={skill.currentSalary}
                   trendStatus={skill.trendStatus}
-                  category={categorizeSkill(skill.name)}
+                  category={skill.category}
                   showGrowth={showPercentGrowth}
                 />
               </Link>
@@ -264,7 +373,7 @@ async function TrendingContent({
                   salaryChange={skill.salaryChange}
                   currentSalary={skill.currentSalary}
                   trendStatus={skill.trendStatus}
-                  category={categorizeSkill(skill.name)}
+                  category={skill.category}
                   showGrowth={showPercentGrowth}
                 />
               </Link>
@@ -296,10 +405,14 @@ async function TrendingContent({
               learning path
             </p>
           </div>
-          <Button className="gap-2 glow-primary">
-            <Download className="h-4 w-4" />
-            Export Trends
-          </Button>
+          <TrendsExportButton
+            data={trendingSkills}
+            timeframe={timeframe}
+            sortBy={sortBy}
+            comparisonMode={stats.comparisonMode}
+            comparisonWindow={stats.comparisonWindow}
+            dataAsOf={stats.dataAsOf}
+          />
         </div>
       </div>
     </div>
@@ -351,3 +464,4 @@ export default async function TrendsPage({
     </MobilePageShell>
   );
 }
+

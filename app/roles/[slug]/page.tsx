@@ -27,7 +27,6 @@ import {
   getRoleGrowth,
 } from "@/db/queries";
 import { RoleSalaryPreview } from "@/components/ui/intelligence/role-salary-preview";
-import { RoleSimilarRoles } from "@/components/ui/intelligence/role-similar-roles";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 interface PageProps {
@@ -184,7 +183,6 @@ export default async function RoleDetailPage({ params }: PageProps) {
         {/* ML Intelligence Sections */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <RoleSalaryPreview roleTitle={title} />
-          <RoleSimilarRoles roleSlug={slugStr} />
         </div>
 
         {/* 4. Content Layout: Charts and Lists */}

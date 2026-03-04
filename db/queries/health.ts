@@ -1,0 +1,1 @@
+export { getDataHealthDashboard } from "./shared";

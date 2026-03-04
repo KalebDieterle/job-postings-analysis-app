@@ -123,6 +123,201 @@ export async function getDatabaseStats() {
   return result.rows[0];
 }
 
+export async function getDataHealthDashboard(params?: {
+  sourceLimit?: number;
+  countryLimit?: number;
+}) {
+  const sourceLimit = Number.isFinite(params?.sourceLimit)
+    ? Math.min(Math.max(Math.floor(params?.sourceLimit ?? 8), 1), 20)
+    : 8;
+  const countryLimit = Number.isFinite(params?.countryLimit)
+    ? Math.min(Math.max(Math.floor(params?.countryLimit ?? 10), 1), 30)
+    : 10;
+
+  const [summaryResult, sourceResult, countryResult] = await Promise.all([
+    db.execute<{
+      total_postings: number;
+      salary_covered: number;
+      jobs_with_skills: number;
+      company_linked: number;
+      location_covered: number;
+      remote_present: number;
+      missing_source: number;
+      missing_country: number;
+      duplicate_external_keys: number;
+      stale_90d: number;
+      latest_posting_at: string | null;
+    }>(sql`
+      WITH duplicate_rows AS (
+        SELECT
+          GREATEST(COUNT(*) - 1, 0)::int AS duplicate_count
+        FROM ${postings}
+        WHERE ${postings.external_id} IS NOT NULL
+          AND TRIM(${postings.external_id}) <> ''
+        GROUP BY
+          ${postings.external_id},
+          COALESCE(TRIM(${postings.source}), ''),
+          COALESCE(TRIM(${postings.country}), '')
+        HAVING COUNT(*) > 1
+      )
+      SELECT
+        COUNT(*)::int AS total_postings,
+        COUNT(*) FILTER (WHERE ${validAnnualSalaryFilter("postings")})::int AS salary_covered,
+        (
+          SELECT COUNT(DISTINCT ${job_skills.job_id})::int
+          FROM ${job_skills}
+        ) AS jobs_with_skills,
+        COUNT(*) FILTER (WHERE ${postings.company_id} IS NOT NULL)::int AS company_linked,
+        COUNT(*) FILTER (
+          WHERE ${postings.location} IS NOT NULL AND TRIM(${postings.location}) <> ''
+        )::int AS location_covered,
+        COUNT(*) FILTER (WHERE ${postings.remote_allowed} IS NOT NULL)::int AS remote_present,
+        COUNT(*) FILTER (WHERE ${postings.source} IS NULL OR TRIM(${postings.source}) = '')::int AS missing_source,
+        COUNT(*) FILTER (WHERE ${postings.country} IS NULL OR TRIM(${postings.country}) = '')::int AS missing_country,
+        COALESCE((SELECT SUM(duplicate_count)::int FROM duplicate_rows), 0) AS duplicate_external_keys,
+        COUNT(*) FILTER (
+          WHERE ${postings.listed_time} < NOW() - INTERVAL '90 days'
+        )::int AS stale_90d,
+        MAX(${postings.listed_time})::text AS latest_posting_at
+      FROM ${postings}
+    `),
+    db.execute<{
+      source: string;
+      posting_count: number;
+      salary_coverage_pct: number;
+      skill_coverage_pct: number;
+      median_salary: number;
+      latest_posting_at: string | null;
+    }>(sql`
+      WITH skill_jobs AS (
+        SELECT DISTINCT ${job_skills.job_id} AS job_id
+        FROM ${job_skills}
+      )
+      SELECT
+        COALESCE(NULLIF(LOWER(TRIM(p.source)), ''), 'unknown') AS source,
+        COUNT(*)::int AS posting_count,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE ${validAnnualSalaryFilter("p")})::numeric
+            / NULLIF(COUNT(*)::numeric, 0)
+          ) * 100,
+          1
+        )::float AS salary_coverage_pct,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE sj.job_id IS NOT NULL)::numeric
+            / NULLIF(COUNT(*)::numeric, 0)
+          ) * 100,
+          1
+        )::float AS skill_coverage_pct,
+        COALESCE(
+          ROUND(
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY CASE
+                WHEN ${validAnnualSalaryFilter("p")} THEN p.yearly_min_salary
+              END
+            )
+          )::int,
+          0
+        ) AS median_salary,
+        MAX(p.listed_time)::text AS latest_posting_at
+      FROM ${postings} p
+      LEFT JOIN skill_jobs sj ON p.job_id = sj.job_id
+      GROUP BY 1
+      ORDER BY posting_count DESC
+      LIMIT ${sourceLimit}
+    `),
+    db.execute<{
+      country: string;
+      posting_count: number;
+      salary_coverage_pct: number;
+      skill_coverage_pct: number;
+      median_salary: number;
+      latest_posting_at: string | null;
+    }>(sql`
+      WITH skill_jobs AS (
+        SELECT DISTINCT ${job_skills.job_id} AS job_id
+        FROM ${job_skills}
+      )
+      SELECT
+        COALESCE(NULLIF(UPPER(TRIM(p.country)), ''), 'UNKNOWN') AS country,
+        COUNT(*)::int AS posting_count,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE ${validAnnualSalaryFilter("p")})::numeric
+            / NULLIF(COUNT(*)::numeric, 0)
+          ) * 100,
+          1
+        )::float AS salary_coverage_pct,
+        ROUND(
+          (
+            COUNT(*) FILTER (WHERE sj.job_id IS NOT NULL)::numeric
+            / NULLIF(COUNT(*)::numeric, 0)
+          ) * 100,
+          1
+        )::float AS skill_coverage_pct,
+        COALESCE(
+          ROUND(
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY CASE
+                WHEN ${validAnnualSalaryFilter("p")} THEN p.yearly_min_salary
+              END
+            )
+          )::int,
+          0
+        ) AS median_salary,
+        MAX(p.listed_time)::text AS latest_posting_at
+      FROM ${postings} p
+      LEFT JOIN skill_jobs sj ON p.job_id = sj.job_id
+      GROUP BY 1
+      ORDER BY posting_count DESC
+      LIMIT ${countryLimit}
+    `),
+  ]);
+
+  const summary = summaryResult.rows[0];
+  const totalPostings = Number(summary?.total_postings ?? 0);
+  const pct = (value: number) =>
+    totalPostings > 0 ? Number(((value / totalPostings) * 100).toFixed(1)) : 0;
+
+  return {
+    summary: {
+      totalPostings,
+      salaryCovered: Number(summary?.salary_covered ?? 0),
+      jobsWithSkills: Number(summary?.jobs_with_skills ?? 0),
+      companyLinked: Number(summary?.company_linked ?? 0),
+      locationCovered: Number(summary?.location_covered ?? 0),
+      remotePresent: Number(summary?.remote_present ?? 0),
+      missingSource: Number(summary?.missing_source ?? 0),
+      missingCountry: Number(summary?.missing_country ?? 0),
+      duplicateExternalKeys: Number(summary?.duplicate_external_keys ?? 0),
+      stale90d: Number(summary?.stale_90d ?? 0),
+      latestPostingAt: summary?.latest_posting_at ?? null,
+      salaryCoveragePct: pct(Number(summary?.salary_covered ?? 0)),
+      skillCoveragePct: pct(Number(summary?.jobs_with_skills ?? 0)),
+      companyLinkagePct: pct(Number(summary?.company_linked ?? 0)),
+      locationCoveragePct: pct(Number(summary?.location_covered ?? 0)),
+      remoteFieldCoveragePct: pct(Number(summary?.remote_present ?? 0)),
+    },
+    sourceBreakdown: sourceResult.rows.map((row) => ({
+      source: row.source,
+      postingCount: Number(row.posting_count ?? 0),
+      salaryCoveragePct: Number(row.salary_coverage_pct ?? 0),
+      skillCoveragePct: Number(row.skill_coverage_pct ?? 0),
+      medianSalary: Number(row.median_salary ?? 0),
+      latestPostingAt: row.latest_posting_at ?? null,
+    })),
+    countryBreakdown: countryResult.rows.map((row) => ({
+      country: row.country,
+      postingCount: Number(row.posting_count ?? 0),
+      salaryCoveragePct: Number(row.salary_coverage_pct ?? 0),
+      skillCoveragePct: Number(row.skill_coverage_pct ?? 0),
+      medianSalary: Number(row.median_salary ?? 0),
+      latestPostingAt: row.latest_posting_at ?? null,
+    })),
+  };
+}
+
 // ===========================
 // Top job titles with canonical names
 // ===========================
@@ -1788,6 +1983,121 @@ export async function getTrendingStats(timeframe: number = 30) {
       currentEnd: endDate.toISOString().slice(0, 10),
       previousStart: previousStartDate.toISOString().slice(0, 10),
       previousEnd: previousEndDisplay.toISOString().slice(0, 10),
+    },
+  };
+}
+
+export async function getSourceCountrySegmentation(
+  timeframeDays: number = 30,
+  sourceLimit: number = 6,
+  countryLimit: number = 8,
+) {
+  const days = normalizeTimeframeDays(timeframeDays);
+  const { startDate, endDate } = await getMostRecentDateRange(days);
+
+  const safeSourceLimit = Number.isFinite(sourceLimit)
+    ? Math.min(Math.max(Math.floor(sourceLimit), 1), 20)
+    : 6;
+  const safeCountryLimit = Number.isFinite(countryLimit)
+    ? Math.min(Math.max(Math.floor(countryLimit), 1), 20)
+    : 8;
+
+  const [sourceResult, countryResult, totalsResult] = await Promise.all([
+    db.execute<{
+      source: string;
+      posting_count: number;
+      share_pct: number;
+      median_salary: number;
+    }>(sql`
+      SELECT
+        COALESCE(NULLIF(LOWER(TRIM(${postings.source})), ''), 'unknown') AS source,
+        COUNT(*)::int AS posting_count,
+        ROUND((COUNT(*)::numeric / NULLIF(SUM(COUNT(*)) OVER (), 0)) * 100, 1)::float AS share_pct,
+        COALESCE(
+          ROUND(
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY CASE
+                WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                  AND (
+                    ${postings.yearly_max_salary} IS NULL
+                    OR (
+                      ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                      AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                    )
+                  )
+                THEN ${postings.yearly_min_salary}
+              END
+            )
+          )::int,
+          0
+        ) AS median_salary
+      FROM ${postings}
+      WHERE ${postings.listed_time} >= ${startDate.toISOString()}::timestamp
+        AND ${postings.listed_time} <= ${endDate.toISOString()}::timestamp
+      GROUP BY 1
+      ORDER BY posting_count DESC
+      LIMIT ${safeSourceLimit}
+    `),
+    db.execute<{
+      country: string;
+      posting_count: number;
+      share_pct: number;
+      median_salary: number;
+    }>(sql`
+      SELECT
+        COALESCE(NULLIF(UPPER(TRIM(${postings.country})), ''), 'UNKNOWN') AS country,
+        COUNT(*)::int AS posting_count,
+        ROUND((COUNT(*)::numeric / NULLIF(SUM(COUNT(*)) OVER (), 0)) * 100, 1)::float AS share_pct,
+        COALESCE(
+          ROUND(
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY CASE
+                WHEN ${postings.yearly_min_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                  AND (
+                    ${postings.yearly_max_salary} IS NULL
+                    OR (
+                      ${postings.yearly_max_salary} BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
+                      AND ${postings.yearly_max_salary} >= ${postings.yearly_min_salary}
+                    )
+                  )
+                THEN ${postings.yearly_min_salary}
+              END
+            )
+          )::int,
+          0
+        ) AS median_salary
+      FROM ${postings}
+      WHERE ${postings.listed_time} >= ${startDate.toISOString()}::timestamp
+        AND ${postings.listed_time} <= ${endDate.toISOString()}::timestamp
+      GROUP BY 1
+      ORDER BY posting_count DESC
+      LIMIT ${safeCountryLimit}
+    `),
+    db.execute<{ total_postings: number }>(sql`
+      SELECT COUNT(*)::int AS total_postings
+      FROM ${postings}
+      WHERE ${postings.listed_time} >= ${startDate.toISOString()}::timestamp
+        AND ${postings.listed_time} <= ${endDate.toISOString()}::timestamp
+    `),
+  ]);
+
+  return {
+    sourceBreakdown: sourceResult.rows.map((row) => ({
+      source: row.source,
+      postingCount: Number(row.posting_count ?? 0),
+      sharePct: Number(row.share_pct ?? 0),
+      medianSalary: Number(row.median_salary ?? 0),
+    })),
+    countryBreakdown: countryResult.rows.map((row) => ({
+      country: row.country,
+      postingCount: Number(row.posting_count ?? 0),
+      sharePct: Number(row.share_pct ?? 0),
+      medianSalary: Number(row.median_salary ?? 0),
+    })),
+    totalPostings: Number(totalsResult.rows[0]?.total_postings ?? 0),
+    window: {
+      start: startDate.toISOString().slice(0, 10),
+      end: endDate.toISOString().slice(0, 10),
     },
   };
 }

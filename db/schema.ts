@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp, index, serial, real } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp, index, serial, real, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
 export const benefits = pgTable("benefits", {
@@ -101,7 +101,7 @@ export const postings = pgTable("postings", {
 }, (table) => ({
   // Compound index for global uniqueness: (external_id, source, country)
   // Prevents duplicate jobs when importing from multiple countries
-  externalIdSourceCountryIdx: index('postings_external_id_source_country_idx')
+  externalIdSourceCountryIdx: uniqueIndex('postings_external_id_source_country_idx')
     .on(table.external_id, table.source, table.country),
 }));
 
