@@ -87,6 +87,25 @@ export default async function DataHealthPage() {
       message: `${summary.duplicateExternalKeys.toLocaleString()} duplicate external/source/country keys detected.`,
     });
   }
+  const orphanRelationTotal =
+    summary.orphanJobSkillsPostings +
+    summary.orphanJobIndustriesPostings +
+    summary.orphanBenefitsPostings +
+    summary.orphanSalariesPostings;
+  if (orphanRelationTotal > 0) {
+    alerts.push({
+      level: "high",
+      message: `${orphanRelationTotal.toLocaleString()} orphan relation rows detected across skills, industries, benefits, and salaries.`,
+    });
+  }
+  const duplicateRelationPairs =
+    summary.duplicateJobSkillsPairs + summary.duplicateJobIndustriesPairs;
+  if (duplicateRelationPairs > 0) {
+    alerts.push({
+      level: "medium",
+      message: `${duplicateRelationPairs.toLocaleString()} duplicate relation pairs detected (job_skills/job_industries).`,
+    });
+  }
   if (summary.totalPostings > 0 && summary.missingCountry / summary.totalPostings > 0.03) {
     alerts.push({
       level: "medium",
@@ -148,6 +167,16 @@ export default async function DataHealthPage() {
           title="Duplicate External Keys"
           value={summary.duplicateExternalKeys.toLocaleString()}
           hint="Duplicate rows across (external_id, source, country)"
+        />
+        <MetricCard
+          title="Orphan Relation Rows"
+          value={orphanRelationTotal.toLocaleString()}
+          hint="Total orphan rows across job_skills, job_industries, benefits, salaries"
+        />
+        <MetricCard
+          title="Duplicate Relation Pairs"
+          value={duplicateRelationPairs.toLocaleString()}
+          hint="Duplicate pairs across job_skills and job_industries"
         />
       </section>
 

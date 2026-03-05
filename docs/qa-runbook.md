@@ -27,6 +27,16 @@ Repeatable Week 11 quality checks for route health, query-parameter handling, AP
 - `npm run qa:full`
   - Runs smoke + data integrity suites
 
+## Relation Integrity Remediation
+- Dry run cleanup report:
+  - `npm run cleanup:relations:dry-run`
+- Apply cleanup (destructive):
+  - `npm run cleanup:relations`
+- Apply DB hardening (constraints/indexes):
+  - `npm run db:migrate:relations`
+- Read-only relation verification:
+  - `npm run verify:relations`
+
 ## Expected Output
 Each suite prints:
 - Suite name and PASS/FAIL

@@ -370,36 +370,95 @@ export async function jobExists(
  */
 export async function batchInsertJobs(
   jobs: Awaited<ReturnType<typeof transformAdzunaJob>>[]
-): Promise<{ inserted: number; updated: number; failed: number }> {
-  if (jobs.length === 0) return { inserted: 0, updated: 0, failed: 0 };
+): Promise<{
+  inserted: number;
+  updated: number;
+  failed: number;
+  persistedJobIds: string[];
+  failedJobIds: string[];
+}> {
+  if (jobs.length === 0) {
+    return {
+      inserted: 0,
+      updated: 0,
+      failed: 0,
+      persistedJobIds: [],
+      failedJobIds: [],
+    };
+  }
+
+  const upsertSet = {
+    title: sql`excluded.title`,
+    description: sql`excluded.description`,
+    min_salary: sql`excluded.min_salary`,
+    max_salary: sql`excluded.max_salary`,
+    yearly_min_salary: sql`excluded.yearly_min_salary`,
+    yearly_max_salary: sql`excluded.yearly_max_salary`,
+    med_salary: sql`excluded.med_salary`,
+    yearly_med_salary: sql`excluded.yearly_med_salary`,
+    location: sql`excluded.location`,
+    work_type: sql`excluded.work_type`,
+    formatted_work_type: sql`excluded.formatted_work_type`,
+    remote_allowed: sql`excluded.remote_allowed`,
+    country: sql`excluded.country`,
+    import_timestamp: sql`excluded.import_timestamp`,
+  };
 
   try {
-    await db
+    const result = await db
       .insert(postings)
       .values(jobs)
       .onConflictDoUpdate({
         target: [postings.external_id, postings.source, postings.country],
-        set: {
-          title: sql`excluded.title`,
-          description: sql`excluded.description`,
-          min_salary: sql`excluded.min_salary`,
-          max_salary: sql`excluded.max_salary`,
-          yearly_min_salary: sql`excluded.yearly_min_salary`,
-          yearly_max_salary: sql`excluded.yearly_max_salary`,
-          med_salary: sql`excluded.med_salary`,
-          yearly_med_salary: sql`excluded.yearly_med_salary`,
-          location: sql`excluded.location`,
-          work_type: sql`excluded.work_type`,
-          formatted_work_type: sql`excluded.formatted_work_type`,
-          remote_allowed: sql`excluded.remote_allowed`,
-          country: sql`excluded.country`,
-          import_timestamp: sql`excluded.import_timestamp`,
-        },
-      });
-    return { inserted: jobs.length, updated: 0, failed: 0 };
+        set: upsertSet,
+      })
+      .returning({ job_id: postings.job_id });
+
+    const persistedJobIds = result.map((row) => row.job_id).filter(Boolean);
+    return {
+      inserted: persistedJobIds.length,
+      updated: 0,
+      failed: 0,
+      persistedJobIds,
+      failedJobIds: [],
+    };
   } catch (error: any) {
-    console.error(`❌ Batch upsert failed:`, error.message);
-    return { inserted: 0, updated: 0, failed: jobs.length };
+    console.error("Batch upsert failed, falling back to per-row upserts:", error.message);
+
+    const persistedJobIds: string[] = [];
+    const failedJobIds: string[] = [];
+
+    for (const job of jobs) {
+      try {
+        const result = await db
+          .insert(postings)
+          .values(job)
+          .onConflictDoUpdate({
+            target: [postings.external_id, postings.source, postings.country],
+            set: upsertSet,
+          })
+          .returning({ job_id: postings.job_id });
+
+        const persisted = result[0]?.job_id ?? job.job_id;
+        if (persisted) {
+          persistedJobIds.push(persisted);
+        } else {
+          failedJobIds.push(job.job_id);
+        }
+      } catch (singleError: any) {
+        const failedId = job.job_id || `adzuna_${job.external_id}`;
+        failedJobIds.push(failedId);
+        console.error(`   Failed fallback upsert for ${failedId}:`, singleError.message);
+      }
+    }
+
+    return {
+      inserted: persistedJobIds.length,
+      updated: 0,
+      failed: failedJobIds.length,
+      persistedJobIds,
+      failedJobIds,
+    };
   }
 }
 

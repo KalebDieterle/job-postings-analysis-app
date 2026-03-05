@@ -28,6 +28,10 @@ This file defines how coding agents should work in this repository.
 - Build: `npm run build`
 - DB generate: `npm run db:generate`
 - DB migrate: `npm run db:migrate`
+- DB relation hardening migrate: `npm run db:migrate:relations`
+- Verify relation integrity: `npm run verify:relations`
+- Relation cleanup dry-run: `npm run cleanup:relations:dry-run`
+- Relation cleanup apply: `npm run cleanup:relations`
 
 ## Data/DB Safety
 
@@ -37,6 +41,7 @@ This file defines how coding agents should work in this repository.
 - `npm run recreate:companies:dry-run`
 - `npm run migrate:company-ids:dry-run`
 - `npm run apply:company-id-migration:dry-run`
+- `npm run cleanup:relations:dry-run`
 - Never commit secrets; use `.env.local` for local values.
 
 ## Validation Expectations

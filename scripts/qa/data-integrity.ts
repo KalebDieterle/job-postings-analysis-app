@@ -8,7 +8,22 @@ const MAX_NULL_CRITICAL_FIELDS = Number(
   process.env.QA_MAX_NULL_CRITICAL_FIELDS ?? 10,
 );
 const MAX_ORPHAN_JOB_SKILLS_POSTINGS = Number(
-  process.env.QA_MAX_ORPHAN_JOB_SKILLS_POSTINGS ?? 250000,
+  process.env.QA_MAX_ORPHAN_JOB_SKILLS_POSTINGS ?? 0,
+);
+const MAX_ORPHAN_JOB_INDUSTRIES_POSTINGS = Number(
+  process.env.QA_MAX_ORPHAN_JOB_INDUSTRIES_POSTINGS ?? 0,
+);
+const MAX_ORPHAN_BENEFITS_POSTINGS = Number(
+  process.env.QA_MAX_ORPHAN_BENEFITS_POSTINGS ?? 0,
+);
+const MAX_ORPHAN_SALARIES_POSTINGS = Number(
+  process.env.QA_MAX_ORPHAN_SALARIES_POSTINGS ?? 0,
+);
+const MAX_DUPLICATE_JOB_SKILLS_PAIRS = Number(
+  process.env.QA_MAX_DUPLICATE_JOB_SKILLS_PAIRS ?? 0,
+);
+const MAX_DUPLICATE_JOB_INDUSTRIES_PAIRS = Number(
+  process.env.QA_MAX_DUPLICATE_JOB_INDUSTRIES_PAIRS ?? 0,
 );
 
 async function getCount(query: ReturnType<typeof sql>): Promise<number> {
@@ -66,6 +81,97 @@ async function main() {
     details: `${orphanJobSkillsPosting} orphan rows (threshold ${MAX_ORPHAN_JOB_SKILLS_POSTINGS})`,
     severity:
       orphanJobSkillsPosting <= MAX_ORPHAN_JOB_SKILLS_POSTINGS
+        ? "low"
+        : "critical",
+  });
+
+  const orphanJobIndustriesPosting = await getCount(sql`
+    SELECT COUNT(*)::int as count
+    FROM job_industries ji
+    LEFT JOIN postings p ON p.job_id = ji.job_id
+    WHERE p.job_id IS NULL
+  `);
+
+  checks.push({
+    name: "No orphan job_industries -> postings",
+    passed: orphanJobIndustriesPosting <= MAX_ORPHAN_JOB_INDUSTRIES_POSTINGS,
+    details: `${orphanJobIndustriesPosting} orphan rows (threshold ${MAX_ORPHAN_JOB_INDUSTRIES_POSTINGS})`,
+    severity:
+      orphanJobIndustriesPosting <= MAX_ORPHAN_JOB_INDUSTRIES_POSTINGS
+        ? "low"
+        : "critical",
+  });
+
+  const orphanBenefitsPosting = await getCount(sql`
+    SELECT COUNT(*)::int as count
+    FROM benefits b
+    LEFT JOIN postings p ON p.job_id = b.job_id
+    WHERE p.job_id IS NULL
+  `);
+
+  checks.push({
+    name: "No orphan benefits -> postings",
+    passed: orphanBenefitsPosting <= MAX_ORPHAN_BENEFITS_POSTINGS,
+    details: `${orphanBenefitsPosting} orphan rows (threshold ${MAX_ORPHAN_BENEFITS_POSTINGS})`,
+    severity:
+      orphanBenefitsPosting <= MAX_ORPHAN_BENEFITS_POSTINGS
+        ? "low"
+        : "critical",
+  });
+
+  const orphanSalariesPosting = await getCount(sql`
+    SELECT COUNT(*)::int as count
+    FROM salaries s
+    LEFT JOIN postings p ON p.job_id = s.job_id
+    WHERE p.job_id IS NULL
+  `);
+
+  checks.push({
+    name: "No orphan salaries -> postings",
+    passed: orphanSalariesPosting <= MAX_ORPHAN_SALARIES_POSTINGS,
+    details: `${orphanSalariesPosting} orphan rows (threshold ${MAX_ORPHAN_SALARIES_POSTINGS})`,
+    severity:
+      orphanSalariesPosting <= MAX_ORPHAN_SALARIES_POSTINGS
+        ? "low"
+        : "critical",
+  });
+
+  const duplicateJobSkillsPairs = await getCount(sql`
+    SELECT COUNT(*)::int AS count
+    FROM (
+      SELECT js.job_id, js.skill_abr
+      FROM job_skills js
+      GROUP BY js.job_id, js.skill_abr
+      HAVING COUNT(*) > 1
+    ) d
+  `);
+
+  checks.push({
+    name: "No duplicate job_skills pairs",
+    passed: duplicateJobSkillsPairs <= MAX_DUPLICATE_JOB_SKILLS_PAIRS,
+    details: `${duplicateJobSkillsPairs} duplicate pairs (threshold ${MAX_DUPLICATE_JOB_SKILLS_PAIRS})`,
+    severity:
+      duplicateJobSkillsPairs <= MAX_DUPLICATE_JOB_SKILLS_PAIRS
+        ? "low"
+        : "critical",
+  });
+
+  const duplicateJobIndustriesPairs = await getCount(sql`
+    SELECT COUNT(*)::int AS count
+    FROM (
+      SELECT ji.job_id, ji.industry_id
+      FROM job_industries ji
+      GROUP BY ji.job_id, ji.industry_id
+      HAVING COUNT(*) > 1
+    ) d
+  `);
+
+  checks.push({
+    name: "No duplicate job_industries pairs",
+    passed: duplicateJobIndustriesPairs <= MAX_DUPLICATE_JOB_INDUSTRIES_PAIRS,
+    details: `${duplicateJobIndustriesPairs} duplicate pairs (threshold ${MAX_DUPLICATE_JOB_INDUSTRIES_PAIRS})`,
+    severity:
+      duplicateJobIndustriesPairs <= MAX_DUPLICATE_JOB_INDUSTRIES_PAIRS
         ? "low"
         : "critical",
   });

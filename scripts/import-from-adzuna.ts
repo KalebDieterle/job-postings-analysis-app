@@ -236,6 +236,7 @@ async function importFromAdzuna() {
   let totalIndustriesMapped = 0;
   let totalRequestsThisRun = 0;
   const uniqueCompanies = new Set<string>();
+  const failedJobIds = new Set<string>();
 
   try {
     // Iterate through each location, then each role
@@ -328,25 +329,40 @@ async function importFromAdzuna() {
           totalJobsInserted += insertResult.inserted;
           totalJobsUpdated += insertResult.updated;
           totalJobsFailed += insertResult.failed;
+          insertResult.failedJobIds.forEach((jobId) => failedJobIds.add(jobId));
 
           console.log(`   💾 Inserted: ${insertResult.inserted}, Updated: ${insertResult.updated}, Failed: ${insertResult.failed}`);
-
-          // Extract and insert skills for all jobs in this batch
-          const jobsForSkills = transformedJobs.map(j => ({
-            job_id: j.job_id,
-            title: j.title,
-            description: j.description,
-          }));
-          const skillResult = await extractAndInsertSkills(jobsForSkills);
-          totalSkillsInserted += skillResult.inserted;
-          if (skillResult.inserted > 0) {
-            console.log(`   🧠 Skills: ${skillResult.inserted} associations created`);
+          if (insertResult.failedJobIds.length > 0) {
+            console.log(`   ⚠️  Failed job IDs in this batch: ${insertResult.failedJobIds.join(', ')}`);
           }
 
-          // Map categories to industries
+          // Extract and insert skills only for jobs that were successfully persisted.
+          const persistedJobIdSet = new Set(insertResult.persistedJobIds);
+          const jobsForSkills = transformedJobs
+            .filter((job) => persistedJobIdSet.has(job.job_id))
+            .map((job) => ({
+              job_id: job.job_id,
+              title: job.title,
+              description: job.description,
+            }));
+
+          if (jobsForSkills.length > 0) {
+            const skillResult = await extractAndInsertSkills(jobsForSkills);
+            totalSkillsInserted += skillResult.inserted;
+            if (skillResult.inserted > 0) {
+              console.log(`   🧠 Skills: ${skillResult.inserted} associations created`);
+            }
+          } else {
+            console.log('   ℹ️  Skipped skill extraction for this batch (no persisted postings)');
+          }
+
+          // Map categories to industries only for jobs that were successfully persisted.
           for (const job of validJobs) {
             if (job.category?.tag && job.category?.label) {
               const jobId = `adzuna_${job.id}`;
+              if (!persistedJobIdSet.has(jobId)) {
+                continue;
+              }
               await mapCategoryToIndustry(jobId, job.category.tag, job.category.label);
               totalIndustriesMapped++;
             }
@@ -397,6 +413,12 @@ async function importFromAdzuna() {
     console.log(`   Skills associations: ${totalSkillsInserted}`);
     console.log(`   Industries mapped: ${totalIndustriesMapped}`);
     console.log(`   Requests this run: ${totalRequestsThisRun}`);
+    console.log(`   Distinct failed job IDs: ${failedJobIds.size}`);
+    if (failedJobIds.size > 0) {
+      const failedList = Array.from(failedJobIds);
+      console.log('   Failed job ID report:');
+      console.log(JSON.stringify({ failedJobIds: failedList }, null, 2));
+    }
     console.log('');
 
     // Update usage stats in database

@@ -49,14 +49,18 @@ export const industries = pgTable("industries", {
 });
 
 export const job_industries = pgTable("job_industries", {
-    job_id: text("job_id").notNull(),
-    industry_id: text("industry_id").notNull(),
-});
+    job_id: text("job_id").notNull().references(() => postings.job_id, { onDelete: "cascade" }),
+    industry_id: text("industry_id").notNull().references(() => industries.industry_id),
+}, (table) => ({
+    jobIndustryUniqIdx: uniqueIndex("job_industries_job_id_industry_id_uidx").on(table.job_id, table.industry_id),
+}));
 
 export const job_skills = pgTable("job_skills", {
-    job_id: text("job_id").notNull(),
-    skill_abr: text("skill_abr").notNull(),
-});
+    job_id: text("job_id").notNull().references(() => postings.job_id, { onDelete: "cascade" }),
+    skill_abr: text("skill_abr").notNull().references(() => skills.skill_abr),
+}, (table) => ({
+    jobSkillUniqIdx: uniqueIndex("job_skills_job_id_skill_abr_uidx").on(table.job_id, table.skill_abr),
+}));
 
 export const postings = pgTable("postings", {
   job_id: text("job_id").notNull().primaryKey(),

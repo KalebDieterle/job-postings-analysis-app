@@ -1,7 +1,7 @@
 import { db } from '../index';
 import { 
   companies, skills, job_skills, job_industries, industries, 
-  roleAliases, top_companies, postings, employee_counts, company_industries 
+  roleAliases, top_companies, postings, employee_counts, company_industries, benefits, salaries
 } from '../schema';
 import { 
   eq, sql, count, desc, asc, inArray, ilike, gte, lte, and, not, lt, gt, avg, isNotNull 
@@ -145,6 +145,12 @@ export async function getDataHealthDashboard(params?: {
       missing_source: number;
       missing_country: number;
       duplicate_external_keys: number;
+      orphan_job_skills_postings: number;
+      orphan_job_industries_postings: number;
+      orphan_benefits_postings: number;
+      orphan_salaries_postings: number;
+      duplicate_job_skills_pairs: number;
+      duplicate_job_industries_pairs: number;
       stale_90d: number;
       latest_posting_at: string | null;
     }>(sql`
@@ -159,13 +165,60 @@ export async function getDataHealthDashboard(params?: {
           COALESCE(TRIM(${postings.source}), ''),
           COALESCE(TRIM(${postings.country}), '')
         HAVING COUNT(*) > 1
+      ),
+      skill_jobs AS (
+        SELECT DISTINCT js.job_id AS job_id
+        FROM ${job_skills} js
+        INNER JOIN ${postings} p ON p.job_id = js.job_id
+      ),
+      orphan_job_skills AS (
+        SELECT COUNT(*)::int AS count
+        FROM ${job_skills} js
+        LEFT JOIN ${postings} p ON p.job_id = js.job_id
+        WHERE p.job_id IS NULL
+      ),
+      orphan_job_industries AS (
+        SELECT COUNT(*)::int AS count
+        FROM ${job_industries} ji
+        LEFT JOIN ${postings} p ON p.job_id = ji.job_id
+        WHERE p.job_id IS NULL
+      ),
+      orphan_benefits AS (
+        SELECT COUNT(*)::int AS count
+        FROM benefits b
+        LEFT JOIN ${postings} p ON p.job_id = b.job_id
+        WHERE p.job_id IS NULL
+      ),
+      orphan_salaries AS (
+        SELECT COUNT(*)::int AS count
+        FROM salaries s
+        LEFT JOIN ${postings} p ON p.job_id = s.job_id
+        WHERE p.job_id IS NULL
+      ),
+      duplicate_job_skills AS (
+        SELECT COUNT(*)::int AS count
+        FROM (
+          SELECT js.job_id, js.skill_abr
+          FROM ${job_skills} js
+          GROUP BY js.job_id, js.skill_abr
+          HAVING COUNT(*) > 1
+        ) d
+      ),
+      duplicate_job_industries AS (
+        SELECT COUNT(*)::int AS count
+        FROM (
+          SELECT ji.job_id, ji.industry_id
+          FROM ${job_industries} ji
+          GROUP BY ji.job_id, ji.industry_id
+          HAVING COUNT(*) > 1
+        ) d
       )
       SELECT
         COUNT(*)::int AS total_postings,
         COUNT(*) FILTER (WHERE ${validAnnualSalaryFilter("postings")})::int AS salary_covered,
         (
-          SELECT COUNT(DISTINCT ${job_skills.job_id})::int
-          FROM ${job_skills}
+          SELECT COUNT(*)::int
+          FROM skill_jobs
         ) AS jobs_with_skills,
         COUNT(*) FILTER (WHERE ${postings.company_id} IS NOT NULL)::int AS company_linked,
         COUNT(*) FILTER (
@@ -175,6 +228,12 @@ export async function getDataHealthDashboard(params?: {
         COUNT(*) FILTER (WHERE ${postings.source} IS NULL OR TRIM(${postings.source}) = '')::int AS missing_source,
         COUNT(*) FILTER (WHERE ${postings.country} IS NULL OR TRIM(${postings.country}) = '')::int AS missing_country,
         COALESCE((SELECT SUM(duplicate_count)::int FROM duplicate_rows), 0) AS duplicate_external_keys,
+        (SELECT count FROM orphan_job_skills) AS orphan_job_skills_postings,
+        (SELECT count FROM orphan_job_industries) AS orphan_job_industries_postings,
+        (SELECT count FROM orphan_benefits) AS orphan_benefits_postings,
+        (SELECT count FROM orphan_salaries) AS orphan_salaries_postings,
+        (SELECT count FROM duplicate_job_skills) AS duplicate_job_skills_pairs,
+        (SELECT count FROM duplicate_job_industries) AS duplicate_job_industries_pairs,
         COUNT(*) FILTER (
           WHERE ${postings.listed_time} < NOW() - INTERVAL '90 days'
         )::int AS stale_90d,
@@ -291,6 +350,12 @@ export async function getDataHealthDashboard(params?: {
       missingSource: Number(summary?.missing_source ?? 0),
       missingCountry: Number(summary?.missing_country ?? 0),
       duplicateExternalKeys: Number(summary?.duplicate_external_keys ?? 0),
+      orphanJobSkillsPostings: Number(summary?.orphan_job_skills_postings ?? 0),
+      orphanJobIndustriesPostings: Number(summary?.orphan_job_industries_postings ?? 0),
+      orphanBenefitsPostings: Number(summary?.orphan_benefits_postings ?? 0),
+      orphanSalariesPostings: Number(summary?.orphan_salaries_postings ?? 0),
+      duplicateJobSkillsPairs: Number(summary?.duplicate_job_skills_pairs ?? 0),
+      duplicateJobIndustriesPairs: Number(summary?.duplicate_job_industries_pairs ?? 0),
       stale90d: Number(summary?.stale_90d ?? 0),
       latestPostingAt: summary?.latest_posting_at ?? null,
       salaryCoveragePct: pct(Number(summary?.salary_covered ?? 0)),
