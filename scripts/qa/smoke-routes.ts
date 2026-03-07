@@ -8,7 +8,6 @@ const PUBLIC_ROUTES = [
   "/companies",
   "/locations",
   "/trends",
-  "/intelligence",
 ];
 
 const INVALID_DYNAMIC_ROUTES = [
