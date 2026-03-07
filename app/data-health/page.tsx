@@ -1,5 +1,5 @@
-// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
-export const revalidate = 1800;
+// Operational dashboard — always render at request time so DB credentials are available.
+export const dynamic = 'force-dynamic';
 
 import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
 

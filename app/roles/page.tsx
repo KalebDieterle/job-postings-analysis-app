@@ -114,6 +114,21 @@ export default async function RolesPage({ searchParams }: PageProps) {
           <RoleDistributionChart data={roleDistribution} />
         </div>
 
+        {/* Deep Analytics - filter-aware */}
+        <div className="mt-4 space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold">Detailed Analytics</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Reflects your current filters
+            </p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PostingTimelineChart data={postingTimeline} />
+            <ExperienceBreakdownChart data={experienceDistribution} />
+          </div>
+          <SkillsFrequencyChart data={skillsFrequency} />
+        </div>
+
         {/* Filter Bar */}
         <MobileStickyActions>
           <FilterBar />
@@ -168,21 +183,6 @@ export default async function RolesPage({ searchParams }: PageProps) {
               return `/roles?${params.toString()}`;
             }}
           />
-        </div>
-
-        {/* Deep Analytics - filter-aware */}
-        <div className="mt-4 space-y-6">
-          <div>
-            <h2 className="text-2xl font-bold">Detailed Analytics</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Reflects your current filters
-            </p>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <PostingTimelineChart data={postingTimeline} />
-            <ExperienceBreakdownChart data={experienceDistribution} />
-          </div>
-          <SkillsFrequencyChart data={skillsFrequency} />
         </div>
       </MobilePageShell>
     );

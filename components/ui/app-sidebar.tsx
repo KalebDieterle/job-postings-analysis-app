@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  BarChart3,
-  Sparkles,
-} from "lucide-react";
+import { Activity, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,38 +14,50 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
+// twMerge (inside cn used by SidebarMenuButton) will resolve conflicts in favour
+// of these overrides since they appear last in the cn() call inside the primitive.
+const NAV_BUTTON_CLASS =
+  "rounded-lg px-3 text-sidebar-foreground/60 transition-colors duration-100 " +
+  "hover:bg-sidebar-accent hover:text-sidebar-foreground " +
+  "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:font-semibold";
+
 export function AppSidebar() {
   const pathname = usePathname();
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-4 group-data-[collapsible=icon]:px-2">
+      {/* ── Brand header ── */}
+      <SidebarHeader className="px-4 py-5 group-data-[collapsible=icon]:px-2">
         <Link href="/" className="group/brand flex items-center gap-3">
-          <div className="relative grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-600 text-white shadow-lg ring-1 ring-white/20 transition-transform duration-300 group-hover/brand:scale-105 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
-            <BarChart3 className="h-5 w-5 transition-transform duration-300 group-hover/brand:scale-110" />
-            <Sparkles className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full bg-sidebar text-sidebar-primary p-0.5 shadow-sm" />
+          {/* Icon mark */}
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm ring-1 ring-sidebar-primary/25 transition-shadow duration-200 group-hover/brand:shadow-md group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
+            <BarChart3 className="h-5 w-5" strokeWidth={2} />
           </div>
-          <div className="group-data-[collapsible=icon]:hidden">
-            <h2 className="text-base font-semibold tracking-tight text-sidebar-foreground">
+          {/* Wordmark */}
+          <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
+            <span className="block text-[15px] font-bold leading-none tracking-tight text-sidebar-foreground">
               SkillMap
-            </h2>
-            <p className="text-xs uppercase tracking-[0.14em] text-sidebar-foreground/60">
+            </span>
+            <span className="mt-1.5 block text-[10px] font-medium uppercase leading-none tracking-[0.2em] text-sidebar-foreground/40">
               Market Intelligence
-            </p>
+            </span>
           </div>
         </Link>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Primary</SidebarGroupLabel>
+      {/* ── Navigation ── */}
+      <SidebarContent className="px-2">
+        {/* Primary section */}
+        <SidebarGroup className="p-0 pt-2">
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/35 group-data-[collapsible=icon]:hidden">
+            Explore
+          </p>
           <SidebarGroupContent>
             <SidebarMenu>
               {MOBILE_NAV_ITEMS.map((item) => {
@@ -57,24 +66,15 @@ export function AppSidebar() {
                     ? pathname === "/"
                     : pathname === item.href ||
                       pathname.startsWith(`${item.href}/`);
-
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <span
-                      className={`absolute inset-y-1 left-0 w-1 rounded-r-full bg-sidebar-primary transition-all duration-300 ${
-                        isActive
-                          ? "opacity-100 scale-y-100"
-                          : "opacity-0 scale-y-75"
-                      }`}
-                      aria-hidden="true"
-                    />
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className="min-h-11 transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
+                      className={NAV_BUTTON_CLASS}
                     >
                       <Link href={item.href}>
-                        <item.icon className="transition-transform duration-300 group-hover/menu-item:scale-110" />
+                        <item.icon />
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
@@ -85,31 +85,29 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>More</SidebarGroupLabel>
+        {/* Divider */}
+        <div className="mx-3 my-2 border-t border-sidebar-border group-data-[collapsible=icon]:mx-2" />
+
+        {/* Tools section */}
+        <SidebarGroup className="p-0">
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/35 group-data-[collapsible=icon]:hidden">
+            Tools
+          </p>
           <SidebarGroupContent>
             <SidebarMenu>
               {DRAWER_SECONDARY_ITEMS.map((item) => {
                 const isActive =
-                  pathname === item.url || pathname.startsWith(`${item.url}/`);
-
+                  pathname === item.url ||
+                  pathname.startsWith(`${item.url}/`);
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <span
-                      className={`absolute inset-y-1 left-0 w-1 rounded-r-full bg-sidebar-primary transition-all duration-300 ${
-                        isActive
-                          ? "opacity-100 scale-y-100"
-                          : "opacity-0 scale-y-75"
-                      }`}
-                      aria-hidden="true"
-                    />
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className="min-h-11 transition-all duration-300 ease-out hover:translate-x-1 data-[active=true]:translate-x-1 data-[active=true]:bg-sidebar-primary/10 data-[active=true]:shadow-sm"
+                      className={NAV_BUTTON_CLASS}
                     >
                       <Link href={item.url}>
-                        <item.icon className="transition-transform duration-300 group-hover/menu-item:scale-110" />
+                        <item.icon />
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
@@ -121,12 +119,28 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
-        <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-xs text-sidebar-foreground/70 transition-colors duration-300 hover:bg-sidebar-accent/60 group-data-[collapsible=icon]:hidden">
-          <p className="font-medium text-sidebar-foreground/80">Live Dataset</p>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.1em]">
-            Powered by LinkedIn data and Adzuna API
-          </p>
+      {/* ── Footer — live data status ── */}
+      <SidebarFooter className="px-3 pb-5 pt-2 group-data-[collapsible=icon]:px-2">
+        {/* Expanded state */}
+        <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/30 px-3 py-2.5 group-data-[collapsible=icon]:hidden">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <div>
+              <p className="text-[11px] font-semibold leading-none text-sidebar-foreground/80">
+                Live Dataset
+              </p>
+              <p className="mt-1 text-[10px] leading-none text-sidebar-foreground/40">
+                Powered by Adzuna API
+              </p>
+            </div>
+          </div>
+        </div>
+        {/* Collapsed icon state */}
+        <div className="hidden items-center justify-center py-2 group-data-[collapsible=icon]:flex">
+          <Activity className="h-4 w-4 text-emerald-500" />
         </div>
       </SidebarFooter>
     </Sidebar>
