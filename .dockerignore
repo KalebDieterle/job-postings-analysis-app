@@ -1,0 +1,6 @@
+node_modules
+.next
+.git
+ml-service
+*.md
+.env*

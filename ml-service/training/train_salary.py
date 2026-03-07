@@ -1,14 +1,18 @@
 """Train LightGBM salary prediction models (median, P10, P90)."""
 
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import joblib
 import lightgbm as lgb
+import mlflow
 import numpy as np
 import pandas as pd
 from category_encoders import TargetEncoder
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
 from export_data import export_salary_data, export_salary_skill_vocab
@@ -352,19 +356,22 @@ def build_salary_premiums(
     }
 
 
-def train() -> None:
+def train(
+    mlflow_tracking_uri: str | None = None,
+    run_name: str | None = None,
+) -> str | None:
     print("=== Salary Model Training ===")
 
     raw_df = export_salary_data()
     if len(raw_df) < 50:
         print(f"Only {len(raw_df)} rows - too few for training. Aborting.")
-        return
+        return None
 
     skill_vocab_df = export_salary_skill_vocab()
     skill_vocab, skill_abrs = _build_skill_vocab(skill_vocab_df)
     if not skill_abrs:
         print("No salary skill vocabulary found. Aborting.")
-        return
+        return None
 
     boundaries = _resolve_scale_boundaries(raw_df)
     raw_df["company_scale_tier_proxy"] = raw_df["company_posting_count"].apply(
@@ -449,17 +456,24 @@ def train() -> None:
         callbacks=[lgb.log_evaluation(100), lgb.early_stopping(50)],
     )
 
-    from sklearn.metrics import mean_absolute_error, r2_score
+    preds_median = models["salary_median"].predict(X_test)
+    mae = float(mean_absolute_error(y_test, preds_median))
+    rmse = float(np.sqrt(mean_squared_error(y_test, preds_median)))
+    r2 = float(r2_score(y_test, preds_median))
+    mape = float(np.mean(np.abs((y_test - preds_median) / y_test)) * 100)
 
-    preds = models["salary_median"].predict(X_test)
-    mae = mean_absolute_error(y_test, preds)
-    r2 = r2_score(y_test, preds)
-    mape = np.mean(np.abs((y_test - preds) / y_test)) * 100
+    preds_p10 = models["salary_p10"].predict(X_test)
+    preds_p90 = models["salary_p90"].predict(X_test)
+    p10_pinball = float(np.mean(np.maximum(0.1 * (y_test - preds_p10), (0.1 - 1) * (y_test - preds_p10))))
+    p90_pinball = float(np.mean(np.maximum(0.9 * (y_test - preds_p90), (0.9 - 1) * (y_test - preds_p90))))
 
     print("\n=== Evaluation ===")
     print(f"MAE:  ${mae:,.0f}")
+    print(f"RMSE: ${rmse:,.0f}")
     print(f"MAPE: {mape:.1f}%")
     print(f"R^2:  {r2:.4f}")
+    print(f"P10 pinball: {p10_pinball:,.0f}")
+    print(f"P90 pinball: {p90_pinball:,.0f}")
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -495,6 +509,99 @@ def train() -> None:
     joblib.dump(salary_premiums, MODEL_DIR / "salary_premiums.joblib")
 
     print("Saved encoders, feature columns, salary vocab, scale metadata, titles, and premiums")
+
+    # --- MLflow experiment tracking ---
+    run_id = None
+    try:
+        try:
+            git_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+            ).decode().strip()
+        except Exception:
+            git_sha = "unknown"
+
+        mlflow.set_tracking_uri(mlflow_tracking_uri or "http://localhost:5000")
+        mlflow.set_experiment("salary-prediction")
+
+        with tempfile.TemporaryDirectory() as _fi_tmp, mlflow.start_run(run_name=run_name) as active_run:
+            run_id = active_run.info.run_id
+
+            # Build and log feature importance CSVs from the temp dir.
+            fi_dir = Path(_fi_tmp)
+            for model_key, fi_name in [
+                ("salary_median", "feature_importance_median"),
+                ("salary_p10", "feature_importance_p10"),
+                ("salary_p90", "feature_importance_p90"),
+            ]:
+                fi = pd.DataFrame({
+                    "feature": feature_columns,
+                    "importance": models[model_key].feature_importance(importance_type="gain"),
+                }).sort_values("importance", ascending=False)
+                fi_path = fi_dir / f"{fi_name}.csv"
+                fi.to_csv(fi_path, index=False)
+                mlflow.log_artifact(str(fi_path))
+
+            mlflow.set_tags({
+                "data_source": "neon",
+                "model_type": "lightgbm",
+                "git_sha": git_sha,
+                "lightgbm_version": lgb.__version__,
+            })
+
+            mlflow.log_params({
+                # Hyperparameters
+                "num_leaves": base_params["num_leaves"],
+                "learning_rate": base_params["learning_rate"],
+                "feature_fraction": base_params["feature_fraction"],
+                "bagging_fraction": base_params["bagging_fraction"],
+                "bagging_freq": base_params["bagging_freq"],
+                "min_data_in_leaf": base_params["min_data_in_leaf"],
+                "num_boost_round": 500,
+                "early_stopping": 50,
+                # Actual iterations
+                "n_iterations_median": models["salary_median"].num_trees(),
+                "n_iterations_p10": models["salary_p10"].num_trees(),
+                "n_iterations_p90": models["salary_p90"].num_trees(),
+                # Dataset
+                "n_rows": len(raw_df),
+                "n_train": len(X_train),
+                "n_test": len(X_test),
+                "n_skills_top": len(skill_abrs),
+                "n_industries_top": len(top_industries),
+                # Features
+                "n_features": len(feature_columns),
+                "categorical_columns": ",".join(cat_cols),
+                "target_encoder_smoothing": 10,
+            })
+
+            mlflow.log_metrics({
+                "median_mae": mae,
+                "median_rmse": rmse,
+                "median_r2": r2,
+                "p10_pinball": p10_pinball,
+                "p90_pinball": p90_pinball,
+            })
+
+            # Model files
+            for name in models:
+                mlflow.log_artifact(str(MODEL_DIR / f"{name}.lgb"))
+
+            # Encoder / vocab / metadata files
+            for artifact_name in [
+                "salary_encoders.joblib",
+                "salary_feature_columns.joblib",
+                "salary_skill_vocab.joblib",
+                "salary_company_scale_meta.joblib",
+                "salary_titles.joblib",
+                "salary_premiums.joblib",
+            ]:
+                mlflow.log_artifact(str(MODEL_DIR / artifact_name))
+
+        print(f"\nMLflow run ID: {run_id}")
+    except Exception as e:
+        print(f"Warning: MLflow logging failed ({e}). Models are still saved locally.")
+
+    return run_id
 
 
 if __name__ == "__main__":

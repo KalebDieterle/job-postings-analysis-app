@@ -1,5 +1,5 @@
 training/
 __pycache__/
 *.pyc
-.env
+.env*
 .git/

@@ -39,6 +39,7 @@ yarn-error.log*
 .env*.local
 .env.local
 .env
+!.env.docker
 
 # Credentials & Secrets
 **/credentials.json

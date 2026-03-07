@@ -1,0 +1,76 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ML_SERVICE_URL: http://ml-service:8000
+      ML_SERVICE_KEY: ${ML_SERVICE_KEY}
+      ML_PROXY_ENABLED: "true"
+      ML_RATE_LIMIT_ENABLED: "false"
+      ML_SERVICE_ALLOWED_HOSTS: ml-service
+      IP_HASH_SECRET: ${IP_HASH_SECRET:-dev-secret}
+    depends_on:
+      ml-service:
+        condition: service_healthy
+    networks:
+      - app-net
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      ML_SERVICE_KEY: ${ML_SERVICE_KEY}
+      ML_SERVICE_AUTH_REQUIRED: "true"
+      ML_RATE_LIMIT_ENABLED: "false"
+      MODEL_DIR: /app/models
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./ml-service/models:/app/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      - mlflow
+    networks:
+      - app-net
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.21.3
+    ports:
+      - "5001:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri /mlflow/runs
+      --default-artifact-root /mlflow/artifacts
+    volumes:
+      - mlflow-runs:/mlflow/runs
+      - mlflow-artifacts:/mlflow/artifacts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  mlflow-runs:
+  mlflow-artifacts:
