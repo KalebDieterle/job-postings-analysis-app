@@ -9,7 +9,8 @@
       "Bash(python:*)",
       "Bash(uv:*)",
       "Bash(py:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "WebFetch(domain:documenter.getpostman.com)"
     ]
   }
 }
