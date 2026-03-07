@@ -293,6 +293,7 @@ export async function POST(request: NextRequest) {
       ),
       body: JSON.stringify(validation.payload),
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
@@ -313,7 +314,10 @@ export async function POST(request: NextRequest) {
     logMlProxyResult(context, ROUTE, "predict", 200, false, "ok");
     return response;
   } catch (error) {
-    console.error("ML salary predict proxy error:", error);
+    console.error(JSON.stringify({
+      route: "/api/ml/salary/predict",
+      msg: error instanceof Error ? error.message : "unknown error",
+    }));
     const response = NextResponse.json(
       { error: "ml_unavailable", message: "ML service unavailable" },
       { status: 503 }

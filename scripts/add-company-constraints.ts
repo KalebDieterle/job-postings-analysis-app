@@ -188,7 +188,9 @@ async function addCompanyConstraints() {
 
   } catch (error: any) {
     console.error('❌ Fatal error:', error.message);
-    console.error(error.stack);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(error.stack);
+    }
     process.exit(1);
   }
 }

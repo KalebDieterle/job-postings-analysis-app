@@ -53,6 +53,7 @@ export async function geocodeWithNominatim(
       headers: {
         'User-Agent': 'JobPostingsAnalysisApp/1.0',
       },
+      signal: AbortSignal.timeout(5_000),
     });
 
     if (!response.ok) {
@@ -112,7 +113,7 @@ export async function geocodeWithGoogle(
       address
     )}&key=${apiKey}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
     const data = await response.json();
 
     if (data.status === 'OK' && data.results[0]) {
@@ -167,7 +168,7 @@ export async function geocodeWithMapbox(
       query
     )}.json?access_token=${accessToken}&limit=1`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
     const data = await response.json();
 
     if (data.features && data.features[0]) {

@@ -446,7 +446,9 @@ async function importFromAdzuna() {
 
   } catch (error: any) {
     console.error('\n❌ Fatal error during import:', error.message);
-    console.error('\nStack trace:', error.stack);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('\nStack trace:', error.stack);
+    }
 
     // Save usage stats to database even on error
     try {

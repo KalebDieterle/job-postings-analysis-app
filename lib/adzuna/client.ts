@@ -1,5 +1,4 @@
 import { AdzunaSearchParams, AdzunaSearchResponse } from './types';
-import dotenv from 'dotenv';
 
 const ADZUNA_BASE_URL = 'https://api.adzuna.com/v1/api';
 
@@ -9,11 +8,6 @@ class AdzunaClient {
   private baseUrl: string;
 
   constructor(country: string = 'us') {
-    // Load .env.local for local script usage
-    if (typeof window === 'undefined' && !process.env.ADZUNA_APP_ID) {
-      dotenv.config({ path: '.env.local' });
-    }
-
     this.appId = process.env.ADZUNA_APP_ID || '';
     this.appKey = process.env.ADZUNA_APP_KEY || '';
     this.baseUrl = `${ADZUNA_BASE_URL}/jobs/${country}`;
@@ -56,7 +50,7 @@ class AdzunaClient {
 
   async search(params: AdzunaSearchParams): Promise<AdzunaSearchResponse> {
     const url = this.buildSearchUrl(params);
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) {
       throw new Error(`Adzuna API error: ${response.status}`);
     }

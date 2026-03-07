@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     const res = await fetch(url.toString(), {
       headers: buildMlUpstreamHeaders(request, context.clientIp),
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
@@ -98,7 +99,10 @@ export async function GET(request: NextRequest) {
     logMlProxyResult(context, ROUTE, "metadata", 200, false, "ok");
     return response;
   } catch (error) {
-    console.error("ML salary metadata proxy error:", error);
+    console.error(JSON.stringify({
+      route: "/api/ml/salary/metadata",
+      msg: error instanceof Error ? error.message : "unknown error",
+    }));
     const degradedPayload = buildDegradedMetadataPayload();
     const response = NextResponse.json(degradedPayload, {
       headers: { "x-ml-degraded": "1" },

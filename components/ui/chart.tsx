@@ -69,37 +69,57 @@ function ChartContainer({
   )
 }
 
+// Allowlist patterns for CSS custom property names and color values.
+// Prevents CSS injection if config values ever come from untrusted sources.
+const SAFE_CSS_IDENT_RE = /^[a-zA-Z0-9_-]+$/;
+const SAFE_CSS_COLOR_RE =
+  /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)|[a-zA-Z]+)$/;
+
+function sanitizeCssIdent(value: string): string | null {
+  return SAFE_CSS_IDENT_RE.test(value) ? value : null;
+}
+
+function sanitizeCssColor(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return SAFE_CSS_COLOR_RE.test(trimmed) ? trimmed : null;
+}
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  const safeId = sanitizeCssIdent(id);
+
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme || config.color
   )
 
-  if (!colorConfig.length) {
+  if (!colorConfig.length || !safeId) {
     return null
   }
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
-  })
-  .join("\n")}
-}
-`
-          )
-          .join("\n"),
-      }}
-    />
-  )
+  const css = Object.entries(THEMES)
+    .map(([theme, prefix]) => {
+      const declarations = colorConfig
+        .map(([key, itemConfig]) => {
+          const safeKey = sanitizeCssIdent(key);
+          const rawColor =
+            itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+            itemConfig.color;
+          const safeColor = sanitizeCssColor(rawColor);
+          return safeKey && safeColor
+            ? `  --color-${safeKey}: ${safeColor};`
+            : null;
+        })
+        .filter(Boolean)
+        .join("\n");
+      return `\n${prefix} [data-chart=${safeId}] {\n${declarations}\n}`;
+    })
+    .join("\n");
+
+  // All values in `css` are allowlist-validated above; dangerouslySetInnerHTML
+  // is required here because React does not support <style> sheet injection
+  // via the style prop for arbitrary selectors.
+  // eslint-disable-next-line react/no-danger
+  return <style dangerouslySetInnerHTML={{ __html: css }} />
 }
 
 const ChartTooltip = RechartsPrimitive.Tooltip

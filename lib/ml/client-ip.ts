@@ -1,29 +1,57 @@
 import { NextRequest } from "next/server";
+import { createHmac } from "crypto";
 
-function firstForwardedIp(headerValue: string | null): string | null {
-  if (!headerValue) return null;
-  const first = headerValue.split(",")[0]?.trim();
-  return first || null;
+// Secret used to HMAC-hash IPs so they cannot be reversed from logs.
+// Falls back to a build-time constant when IP_HASH_SECRET is not set;
+// set IP_HASH_SECRET in production for proper pseudonymisation.
+const IP_HASH_SECRET = process.env.IP_HASH_SECRET || "default-ip-hash-secret-set-IP_HASH_SECRET-in-prod";
+
+// Basic IPv4 / IPv6 sanity check — rejects obviously spoofed non-IP values.
+const VALID_IP_RE = /^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]+$/i;
+
+function isValidIp(value: string): boolean {
+  return VALID_IP_RE.test(value);
 }
 
+/**
+ * Extract the client IP from the request.
+ *
+ * Trust hierarchy (most → least trusted):
+ *   1. fly-client-ip  – set by Fly.io edge, client cannot spoof it.
+ *   2. x-real-ip      – set by Vercel/Nginx, reliable when behind a known proxy.
+ *   3. rightmost non-private x-forwarded-for entry – conservative; the
+ *      leftmost entry CAN be spoofed, so we take the last one added by a
+ *      trusted proxy when there are multiple hops.
+ */
 export function getClientIp(request: NextRequest): string {
-  const xForwardedFor = firstForwardedIp(request.headers.get("x-forwarded-for"));
-  if (xForwardedFor) return xForwardedFor;
-
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
+  // Fly.io strips any client-supplied fly-client-ip before setting its own.
   const flyClientIp = request.headers.get("fly-client-ip")?.trim();
-  if (flyClientIp) return flyClientIp;
+  if (flyClientIp && isValidIp(flyClientIp)) return flyClientIp;
+
+  // Vercel / Nginx set x-real-ip to the real client IP.
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp && isValidIp(realIp)) return realIp;
+
+  // Take the rightmost (most recently appended) entry from x-forwarded-for.
+  // This is the IP the last trusted proxy saw, which is harder to spoof than
+  // the leftmost entry that the client itself controls.
+  const xffHeader = request.headers.get("x-forwarded-for");
+  if (xffHeader) {
+    const parts = xffHeader.split(",").map((s) => s.trim()).filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const candidate = parts[i];
+      if (candidate && isValidIp(candidate)) return candidate;
+    }
+  }
 
   return "unknown";
 }
 
+/**
+ * HMAC-SHA256 hash of the identifier using a server-side secret.
+ * Prevents rainbow-table reversal of hashed IP addresses in logs.
+ */
 export function hashIdentifier(value: string): string {
-  let hash = 5381;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = ((hash << 5) + hash) ^ value.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(16);
+  return createHmac("sha256", IP_HASH_SECRET).update(value).digest("hex").substring(0, 16);
 }
 

@@ -5,8 +5,34 @@ import { checkMlRateLimit, MlEndpointClass } from "@/lib/ml/rate-limit";
 
 const ML_PROXY_ENABLED = process.env.ML_PROXY_ENABLED !== "false";
 const ML_RATE_LIMIT_ENABLED = process.env.ML_RATE_LIMIT_ENABLED !== "false";
-const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || "http://localhost:8000").replace(/\/+$/, "");
+const ML_SERVICE_URL = validateMlServiceUrl(process.env.ML_SERVICE_URL);
 const ML_SERVICE_KEY = process.env.ML_SERVICE_KEY || "";
+
+/**
+ * Validates ML_SERVICE_URL against an allowlist of permitted hosts.
+ * Prevents SSRF by rejecting URLs that point to unexpected destinations.
+ */
+function validateMlServiceUrl(raw: string | undefined): string {
+  const fallback = "http://localhost:8000";
+  const urlStr = (raw || fallback).replace(/\/+$/, "");
+  let parsed: URL;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    console.error(`ML_SERVICE_URL is not a valid URL: "${raw}". Falling back to ${fallback}.`);
+    return fallback;
+  }
+  const allowedHosts = (process.env.ML_SERVICE_ALLOWED_HOSTS || "localhost")
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+  if (!allowedHosts.includes(parsed.hostname)) {
+    const msg = `ML_SERVICE_URL hostname "${parsed.hostname}" is not in ML_SERVICE_ALLOWED_HOSTS. Falling back to ${fallback}.`;
+    console.error(msg);
+    return fallback;
+  }
+  return urlStr;
+}
 
 interface MlProxyLogEvent {
   route: string;

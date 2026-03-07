@@ -26,7 +26,28 @@ type TrendComparisonDateRange = ReturnType<typeof buildAnchoredTimeframeWindow> 
 const isRemoteAllowed = (column: unknown) =>
   sql`LOWER(COALESCE(${column}::text, '')) IN ('1', '1.0', 'true', 't')`;
 
+/**
+ * Escape LIKE/ILIKE pattern metacharacters in user-supplied strings.
+ * PostgreSQL uses backslash as the default LIKE escape character.
+ * Must escape backslash first to avoid double-escaping.
+ */
+function escapeLike(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * @internal alias MUST be a hardcoded SQL table alias — never pass user input here.
+ * The allowlist enforces this at runtime to prevent SQL injection via sql.raw().
+ */
+const VALID_SALARY_FILTER_ALIASES = new Set([
+  'p', 's', 'r', 'rj', 'sp', 'cp', 'tp', 'sub',
+  'postings', 'salaries',
+]);
+
 function validAnnualSalaryFilter(alias: string): ReturnType<typeof sql.raw> {
+  if (!VALID_SALARY_FILTER_ALIASES.has(alias)) {
+    throw new Error(`validAnnualSalaryFilter: disallowed alias "${alias}"`);
+  }
   return sql.raw(`
     ${alias}.yearly_min_salary IS NOT NULL
     AND ${alias}.yearly_min_salary BETWEEN ${VALID_ANNUAL_SALARY_MIN} AND ${VALID_ANNUAL_SALARY_MAX}
@@ -453,7 +474,7 @@ export async function getTopJobRoles(
   const offset = (Math.max(1, Number(page)) - 1) * Number(limit);
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -468,8 +489,8 @@ export async function getTopJobRoles(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -633,7 +654,7 @@ export async function getAllSkills(params: { page?: number; limit?: number; sear
   const { page = 1, limit = 12, search = "" } = params;
   const offset = (page - 1) * limit;
 
-  const conditions = search ? ilike(skills.skill_name, `%${search}%`) : undefined;
+  const conditions = search ? ilike(skills.skill_name, `%${escapeLike(search)}%`) : undefined;
 
   // UPDATED: avg(yearly_min_salary) excluding $0 values
   const data = await db
@@ -675,7 +696,7 @@ export async function getAllSkillsPaginated(params: {
     : 12;
   const search = (params.search ?? "").trim();
 
-  const conditions = search ? ilike(skills.skill_name, `%${search}%`) : undefined;
+  const conditions = search ? ilike(skills.skill_name, `%${escapeLike(search)}%`) : undefined;
 
   const [items, totalRows] = await Promise.all([
     getAllSkills({ page, limit, search }),
@@ -961,8 +982,8 @@ export async function getAllCompanyData({
     )
   ];
 
-  if (search) conditions.push(ilike(companies.name, `%${search}%`));
-  if (location) conditions.push(ilike(companies.country, `%${location}%`));
+  if (search) conditions.push(ilike(companies.name, `%${escapeLike(search)}%`));
+  if (location) conditions.push(ilike(companies.country, `%${escapeLike(location)}%`));
 
   // HAVING conditions for aggregate filters
   const havingConditions: ReturnType<typeof sql>[] = [];
@@ -2197,7 +2218,7 @@ export async function getMedianSalary(
   );
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2211,8 +2232,8 @@ export async function getMedianSalary(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2238,7 +2259,7 @@ export async function getTopLocation(
   const conditions = [];
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2252,8 +2273,8 @@ export async function getTopLocation(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2280,7 +2301,7 @@ export async function getRemotePercentage(
   const conditions = [];
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2294,8 +2315,8 @@ export async function getRemotePercentage(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2324,7 +2345,7 @@ export async function getRoleDistribution(
   const conditions = [];
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2338,8 +2359,8 @@ export async function getRoleDistribution(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2369,7 +2390,7 @@ export async function getSkillsFrequency(
   const conditions = [];
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2383,8 +2404,8 @@ export async function getSkillsFrequency(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2421,7 +2442,7 @@ export async function getPostingTimeline(
   conditions.push(sql`${postings.listed_time} >= ${cutoffDate.toISOString()}::timestamp`);
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2435,8 +2456,8 @@ export async function getPostingTimeline(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2459,7 +2480,7 @@ export async function getExperienceDistribution(
   const conditions = [];
 
   if (filters?.location) {
-    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${filters.location.toLowerCase()}%`}`);
+    conditions.push(sql`LOWER(${postings.location}) LIKE ${`%${escapeLike(filters.location.toLowerCase())}%`}`);
   }
 
   if (filters?.experience && filters.experience.length > 0) {
@@ -2473,8 +2494,8 @@ export async function getExperienceDistribution(
   if (filters?.q) {
     conditions.push(
       sql`(
-        LOWER(${postings.title}) LIKE ${`%${filters.q.toLowerCase()}%`}
-        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${filters.q.toLowerCase()}%`}
+        LOWER(${postings.title}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
+        OR LOWER(${roleAliases.canonical_name}) LIKE ${`%${escapeLike(filters.q.toLowerCase())}%`}
       )`
     );
   }
@@ -2725,7 +2746,7 @@ export async function getSkillsWithFilters(params: {
   const conditions = [];
 
   if (search) {
-    conditions.push(ilike(skills.skill_name, `%${search}%`));
+    conditions.push(ilike(skills.skill_name, `%${escapeLike(search)}%`));
   }
   if (category.length > 0) {
     conditions.push(

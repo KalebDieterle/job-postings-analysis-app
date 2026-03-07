@@ -199,7 +199,9 @@ async function previewImport() {
 
   } catch (error: any) {
     console.error('\n❌ Error during preview:', error.message);
-    console.error('\nStack trace:', error.stack);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('\nStack trace:', error.stack);
+    }
     process.exit(1);
   }
 }
