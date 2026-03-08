@@ -1,6 +1,7 @@
 // Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
 export const revalidate = 1800;
 
+import type { Metadata } from "next";
 import { getSkillDetails, getSkillTrendingData } from "@/db/queries";
 import { SkillTimelineChart } from "@/components/ui/charts/skill-timeline-chart";
 import { StatCard } from "@/components/ui/stat-card";
@@ -14,6 +15,30 @@ import { notFound } from "next/navigation";
 interface TopEmployer {
   name: string | null;
   count: number;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const name = decodeURIComponent(slug);
+  const details = await getSkillDetails(name);
+  const salary =
+    details.medianSalary ?? details.avgSalary
+      ? `$${Math.round(((details.medianSalary ?? details.avgSalary) / 1000))}k`
+      : null;
+
+  return {
+    title: `${name} Jobs — Demand, Salary & Trends`,
+    description: `${details.count.toLocaleString()} job postings require ${name}.${salary ? ` Median salary: ${salary}/yr.` : ""} See top companies and hiring trends.`,
+    openGraph: {
+      title: `${name} | Skill Market Analytics`,
+      description: `Live demand and salary data for ${name} across the tech job market.`,
+      type: "website",
+    },
+  };
 }
 
 export default async function SkillDetailPage({

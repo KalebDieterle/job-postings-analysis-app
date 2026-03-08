@@ -41,7 +41,10 @@
     "apply:company-id-migration": "tsx scripts/apply-company-id-migration.ts",
     "qa:smoke": "tsx scripts/qa/smoke-routes.ts && tsx scripts/qa/smoke-query-params.ts && tsx scripts/qa/smoke-api.ts",
     "qa:data": "tsx scripts/qa/data-integrity.ts",
-    "qa:full": "npm run qa:smoke && npm run qa:data"
+    "qa:full": "npm run qa:smoke && npm run qa:data",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -81,6 +84,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
     "@types/leaflet.heat": "^0.2.5",

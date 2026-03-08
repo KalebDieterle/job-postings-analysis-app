@@ -8,6 +8,7 @@ import { CompanyCard } from "@/components/ui/company-card";
 import { CompaniesFilterBar } from "@/components/ui/filters/companies-filter-bar";
 import { HeroStatsDashboard } from "@/components/ui/companies/hero-stats-dashboard";
 import { ComparisonPanelWrapper } from "@/components/ui/companies/comparison-panel-wrapper";
+import { CompanyExportActions } from "@/components/ui/companies/export-actions";
 
 import { companiesSearchParamsCache } from "@/lib/companies-search-params";
 import { slugify } from "@/lib/slugify";
@@ -110,7 +111,22 @@ export default async function CompaniesPage({ searchParams }: PageProps) {
 
   return (
     <MobilePageShell className="pb-4 md:pb-10">
-      <MobilePageHeader title="Company Explorer" compact />
+      <MobilePageHeader
+        title="Company Explorer"
+        compact
+        actions={
+          <CompanyExportActions
+            data={companies.map((c: any) => ({
+              name: c.name,
+              city: c.city,
+              state: c.state,
+              country: c.country,
+              postingCount: c.postings_count,
+              medianSalary: c.median_salary,
+            }))}
+          />
+        }
+      />
 
       {/* Hero Stats Dashboard */}
       <HeroStatsDashboard stats={heroStats} />

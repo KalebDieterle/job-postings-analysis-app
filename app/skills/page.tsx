@@ -7,6 +7,7 @@ import {
   getCategoryDistribution,
   getSkillGrowthStats,
   getSkillTimeline,
+  getSkillCooccurrence,
 } from "@/db/queries";
 import { SkillCard } from "@/components/ui/skills/skill-card";
 import { FunctionalFilterBar } from "@/components/ui/filters/functional-filter-bar";
@@ -25,6 +26,7 @@ import { Search } from "lucide-react";
 import { Suspense } from "react";
 import { SkillsGridSkeleton } from "@/components/ui/skills/skills-grid-skeleton";
 import { categorizeSkill } from "@/lib/skill-helpers";
+import { CooccurrenceMatrix } from "@/components/ui/skills/cooccurrence-matrix";
 import { skillsSearchParamsCache } from "@/lib/skills-search-params";
 import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
@@ -65,6 +67,10 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
 
   // Fetch advanced stats
   const stats = await getSkillsAdvancedStats();
+
+  // Fetch co-occurrence for network view (only on first page, no filter active)
+  const showCooccurrence = page === 1 && !search && category.length === 0;
+  const cooccurrenceData = showCooccurrence ? await getSkillCooccurrence(18) : [];
 
   // Fetch category distribution for chart
   const categoryData = await getCategoryDistribution();
@@ -214,6 +220,14 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
       {/* Trending Timeline */}
       {timelineData.length > 0 && (
         <TrendingTimeline data={timelineData} skillNames={topSkillNames} />
+      )}
+
+      {/* Skills Co-occurrence Matrix */}
+      {showCooccurrence && cooccurrenceData.length > 0 && (
+        <div>
+          <h4 className="text-xl font-bold mb-4">Skills Network</h4>
+          <CooccurrenceMatrix data={cooccurrenceData} />
+        </div>
       )}
     </>
   );

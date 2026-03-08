@@ -3478,3 +3478,41 @@ export async function getRolesSalaryBenchmark(limit = 15) {
   }));
 }
 
+
+// ===========================
+// Skill Co-occurrence
+// ===========================
+export async function getSkillCooccurrence(topN = 20) {
+  const result = await db.execute<{
+    skill_a: string;
+    skill_b: string;
+    co_count: number;
+  }>(sql`
+    WITH top_skills AS (
+      SELECT js.skill_abr, COALESCE(s.skill_name, js.skill_abr) AS skill_name
+      FROM ${job_skills} js
+      LEFT JOIN ${skills} s ON js.skill_abr = s.skill_abr
+      GROUP BY js.skill_abr, s.skill_name
+      ORDER BY COUNT(*) DESC
+      LIMIT ${topN}
+    )
+    SELECT
+      COALESCE(sa.skill_name, a.skill_abr) AS skill_a,
+      COALESCE(sb.skill_name, b.skill_abr) AS skill_b,
+      COUNT(*)::int AS co_count
+    FROM ${job_skills} a
+    JOIN ${job_skills} b
+      ON a.job_id = b.job_id
+      AND a.skill_abr < b.skill_abr
+    JOIN top_skills sa ON a.skill_abr = sa.skill_abr
+    JOIN top_skills sb ON b.skill_abr = sb.skill_abr
+    GROUP BY COALESCE(sa.skill_name, a.skill_abr), COALESCE(sb.skill_name, b.skill_abr)
+    ORDER BY co_count DESC
+  `);
+
+  return result.rows.map(row => ({
+    skill_a: String(row.skill_a),
+    skill_b: String(row.skill_b),
+    co_count: Number(row.co_count),
+  }));
+}

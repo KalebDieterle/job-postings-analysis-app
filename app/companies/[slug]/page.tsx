@@ -1,6 +1,7 @@
 ﻿// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
 export const revalidate = 1800;
 
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   getCompanyBySlug,
@@ -27,6 +28,29 @@ import { MobileSection } from "@/components/ui/mobile/mobile-section";
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  let company;
+  try {
+    company = await getCompanyBySlug(slug);
+  } catch {
+    company = null;
+  }
+  if (!company) {
+    return { title: "Company Not Found" };
+  }
+  const location = [company.city, company.state, company.country].filter(Boolean).join(", ");
+  return {
+    title: `${company.name} — Jobs, Skills & Hiring Data`,
+    description: `Explore ${company.name} job postings${location ? ` in ${location}` : ""}. View salary data, in-demand skills, and hiring trends.`,
+    openGraph: {
+      title: `${company.name} | Company Intelligence`,
+      description: `Live hiring data for ${company.name}: open roles, salary bands, and top skills required.`,
+      type: "website",
+    },
+  };
+}
 
 function formatMonthLabel(month: string) {
   const [yearPart, monthPart] = month.split("-");

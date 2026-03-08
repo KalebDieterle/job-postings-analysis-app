@@ -1,6 +1,7 @@
 // Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
 export const revalidate = 1800;
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -27,12 +28,42 @@ import {
   getRoleGrowth,
 } from "@/db/queries";
 import { RoleSalaryPreview } from "@/components/ui/intelligence/role-salary-preview";
+import { SkillGapRadar } from "@/components/ui/roles/skill-gap-radar";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
 interface PageProps {
   params: Promise<{
     slug: string | string[];
   }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const slugStr = Array.isArray(slug) ? slug.join("-") : (slug ?? "");
+  const title = slugStr
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+  const [stats, skills] = await Promise.all([
+    getRoleStats(title),
+    getTopSkillsForRole(title, 3),
+  ]);
+
+  const topSkills = skills.map((s) => s.skill_name).join(", ");
+  const medianFloor = stats.median_min_salary
+    ? `$${Math.round(Number(stats.median_min_salary)).toLocaleString()}`
+    : null;
+
+  return {
+    title: `${title} Jobs — Salary, Skills & Hiring Trends`,
+    description: `Explore ${title} job market data. ${medianFloor ? `Median starting salary ${medianFloor}. ` : ""}${topSkills ? `Top skills: ${topSkills}.` : ""}`,
+    openGraph: {
+      title: `${title} | Job Market Analytics`,
+      description: `Live market data for ${title} roles: salaries, in-demand skills, and top hiring companies.`,
+      type: "website",
+    },
+  };
 }
 
 export default async function RoleDetailPage({ params }: PageProps) {
@@ -67,8 +98,33 @@ export default async function RoleDetailPage({ params }: PageProps) {
   const safeGrowth = Number.isFinite(growth) ? growth : 0;
   const isPositiveGrowth = safeGrowth >= 0;
 
+  // JSON-LD structured data for SEO
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Occupation",
+    "name": title,
+    "occupationalCategory": title,
+    "estimatedSalary": stats.median_min_salary
+      ? [
+          {
+            "@type": "MonetaryAmountDistribution",
+            "name": "Median entry salary",
+            "currency": "USD",
+            "duration": "P1Y",
+            "percentile10": stats.median_min_salary,
+            "median": stats.median_max_salary ?? stats.median_min_salary,
+          },
+        ]
+      : undefined,
+    "skills": skills.slice(0, 5).map((s) => s.skill_name).join(", "),
+  };
+
   return (
     <MobilePageShell className="max-w-7xl pt-2 md:pt-4">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* 1. Navigation */}
       <div className="flex items-center pb-4 md:pb-6">
         <Link href="/roles">
@@ -180,9 +236,18 @@ export default async function RoleDetailPage({ params }: PageProps) {
           />
         </div>
 
-        {/* ML Intelligence Sections */}
+        {/* ML Intelligence + Radar */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <RoleSalaryPreview roleTitle={title} />
+          {skills.length >= 3 && (
+            <SkillGapRadar
+              data={skills.map((s) => ({
+                skill: s.skill_name,
+                count: Number(s.count),
+              }))}
+              roleTitle={title}
+            />
+          )}
         </div>
 
         {/* 4. Content Layout: Charts and Lists */}

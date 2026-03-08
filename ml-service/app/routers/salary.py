@@ -19,8 +19,28 @@ DEFAULT_TIERS = [
 ]
 
 
-@router.post("/salary/predict", response_model=SalaryPredictionResponse)
+@router.post(
+    "/salary/predict",
+    response_model=SalaryPredictionResponse,
+    summary="Predict salary range",
+    response_description="Median, P10, and P90 salary estimates with feature attribution",
+)
 async def salary_predict(req: SalaryPredictionRequest):
+    """
+    Predict salary range for a job posting using a LightGBM quantile regression model.
+
+    Returns the **median** (P50) salary, a **lower bound** (P10), and an **upper bound**
+    (P90) estimate. The 80th-percentile interval (P10–P90) represents the range within
+    which 80% of similar real job postings fall.
+
+    Also returns a ranked list of `factors` — the features that most influenced this
+    prediction — and any post-model `adjustments` (e.g. location premium, company size).
+
+    **Quick start:**
+    1. Call `GET /api/v1/salary/metadata` to get valid skill abbreviations and titles.
+    2. Submit this endpoint with at minimum a `title`.
+    3. Add `skills`, `experience_level`, and `location` for higher confidence.
+    """
     required_keys = (
         "salary_median",
         "salary_p10",
@@ -45,11 +65,27 @@ async def salary_predict(req: SalaryPredictionRequest):
     return result
 
 
-@router.get("/salary/metadata", response_model=SalaryMetadataResponse)
+@router.get(
+    "/salary/metadata",
+    response_model=SalaryMetadataResponse,
+    summary="Get valid prediction inputs",
+    response_description="Skills, job titles, and company scale tiers known to the model",
+)
 async def salary_metadata(
-    q: str | None = Query(default=None, max_length=120),
-    limit: int = Query(default=15, ge=1, le=100),
+    q: str | None = Query(default=None, description="Filter titles by prefix (case-insensitive)", max_length=120),
+    limit: int = Query(default=15, description="Maximum number of titles to return", ge=1, le=100),
 ):
+    """
+    Retrieve metadata needed to build a valid `/salary/predict` request.
+
+    Returns:
+    - **skills**: All skill abbreviations recognized by the model, sorted by training frequency.
+      Pass these in the `skills` array of the predict request.
+    - **titles**: Job titles known to the model. Use `?q=soft` to search by prefix.
+    - **company_scale_tiers**: Valid values for the `company_scale_tier` field.
+
+    This endpoint does **not** require authentication and is safe to call frequently.
+    """
     skill_vocab = model_registry.get("salary_skill_vocab")
     if isinstance(skill_vocab, dict):
         skills = skill_vocab.get("skills", [])

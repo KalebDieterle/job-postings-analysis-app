@@ -1,208 +1,257 @@
-# Job Postings Analysis App
+# Job Market Analytics
 
-An analytics and exploratory UI for job postings data built on Next.js (App Router). The app collects, normalizes, and analyzes job postings to surface top roles, trending skills, hiring companies, and basic salary statistics.
+A full-stack analytics platform that collects real job postings from the Adzuna API, normalizes them into a relational database, and surfaces insights about roles, skills, companies, salaries, and geographic trends through an interactive web dashboard — including an ML-powered salary predictor with P10/P90 confidence intervals.
 
-This README documents the project structure, how the pieces fit together, and how to run, develop, and extend the app.
+## Live Demo
 
-## Table of contents
+Deploy the frontend to [Vercel](https://vercel.com) and the ML service to [Fly.io](https://fly.io).
 
-- Project overview
-- Tech stack (detailed)
-- Repository layout
-- Local development
-- Database and data loading
-- Migrations and schema management
-- Key implementation notes
-- Deployment guidance
-- Troubleshooting & common issues
+---
 
-## Project overview
+## Stack
 
-The app is a small analytics surface over a set of job postings CSVs and a relational database. It presents:
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Frontend | Next.js 16 (App Router) + React 19 | Server components, ISR, streaming SSR |
+| Styling | Tailwind CSS v4 + Radix UI | Utility-first + accessible headless components |
+| Charts | Recharts + Leaflet | Time-series, scatter, radar, and geographic heatmaps |
+| State | nuqs | URL-synced filter state (bookmarkable, shareable links) |
+| ORM | Drizzle ORM | Type-safe queries against Postgres |
+| Database | Neon (serverless Postgres) | Scales to zero between imports, no idle cost |
+| ETL | TypeScript scripts + Adzuna API | Rate-limited import with quota tracking |
+| ML Service | FastAPI + LightGBM | Quantile regression salary predictor (P10/P50/P90) |
+| ML Tracking | MLflow | Experiment tracking, model promotion workflow |
+| Dev Env | Docker Compose | Next.js + ML service + MLflow in one command |
+| Testing | Playwright | E2E test suite (5 flows) + GitHub Actions CI |
 
-- A roles listing with sparklines and counts
-- Role detail pages that show top skills, companies, and aggregate statistics
-- Charts and small UI building blocks to explore the data
+---
 
-The codebase uses the Next.js App Router, server components for data fetching, and a thin React client layer for interactive UI pieces.
+## Architecture
 
-## Tech stack (detailed)
+```
+Browser
+  │
+  ▼
+Vercel (Next.js 16)          ─── ISR/SSR pages: /, /roles, /skills,
+  │   Server Components             /companies, /locations, /trends
+  │   nuqs URL state
+  │
+  ├──► Neon Postgres          ─── All analytics queries (db/queries/)
+  │    (DATABASE_URL)              Drizzle ORM, lazy-initialized connection
+  │
+  └──► Fly.io (FastAPI)       ─── /api/v1/salary/predict
+       ML Service                  /api/v1/salary/metadata
+       (ML_SERVICE_URL)            LightGBM quantile regression
+       LightGBM models             P10 / P50 / P90 salary estimates
+              │
+              └──► MLflow     ─── Experiment tracking (local Docker only)
+                   (port 5001)     Model registry + promotion workflow
+```
 
-Below is a breakdown of the libraries and technologies used and why they were chosen.
+---
 
-- **Next.js (App Router)**: Provides file-based routing with server and client components. Pages and routes live in the `app/` directory and the project uses server-side rendering and data fetching via async server components.
+## Local Development
 
-- **React 19**: UI library. The project uses both server and client components; client components enable interactive elements like charts and small utilities.
+### Prerequisites
 
-- **TypeScript**: Static typing across the codebase for better DX and safer refactors. Config is in `tsconfig.json`.
+- Node.js 20+
+- Python 3.11+ (for ML service)
+- Docker + Docker Compose (for full stack)
+- A Postgres database (Neon recommended)
 
-- **Tailwind CSS v4 + PostCSS**: Utility-first styling. The project uses `globals.css` and Tailwind classes across components. PostCSS is configured in `postcss.config.mjs`.
-
-- **Drizzle ORM + drizzle-kit**: Lightweight TypeScript-first ORM used to define schema and run queries against Postgres. Schema and queries are in `db/schema.ts` and `db/queries.ts`. Migrations are driven by `drizzle-kit` and helper scripts.
-
-- **Postgres (serverless / Neon-ready)**: The data is stored in a Postgres-compatible database. The package `@neondatabase/serverless` is included and the code expects a `DATABASE_URL` compatible with Postgres/Neon.
-
-- **@tanstack/react-query**: Client-side data fetching and caching for interactive parts (if used in the future or client components).
-
-- **Papaparse**: Fast CSV parsing for data import tasks and scripts in `PSQL Data Loader/` and `scripts/`.
-
-- **Recharts**: Charting library used for visualizations (sparklines and other simple charts).
-
-- **Lucide-react**: Icon set used throughout the UI (`lucide-react`).
-
-- **Radix UI primitives**: Accessible headless components provided by `@radix-ui/*` packages.
-
-- **nuqs, class-variance-authority, clsx, tailwind-merge**: Utility libraries for class management and design-system utilities.
-
-- **tsx**: Dev tool to run TypeScript scripts under `scripts/` and `db/migrate.ts` without a separate build step.
-
-- **Drizzle-kit migration scripts**: The repo includes `db/migrate.ts` and `drizzle.config.ts` to manage schema migrations and generate types.
-
-## Repository layout
-
-- `app/` — Next.js App Router pages and layouts. Key routes:
-  - `app/roles/page.tsx` — roles listing
-  - `app/roles/[slug]/page.tsx` — role detail page
-
-- `components/` — UI primitives and composed components. `components/ui/` contains cards, buttons, charts and other building blocks.
-
-- `db/` — Drizzle schema, queries, migrate helper, and migrations folder.
-
-- `PSQL Data Loader/` — CSVs and scripts used to import the original dataset into Postgres. Large CSVs are stored here for offline loading.
-
-- `scripts/` — misc helper scripts for imports and data transformations.
-
-- `public/` — static assets.
-
-- `package.json` — scripts and dependencies.
-
-Key files to inspect:
-
-- [app/roles/page.tsx](app/roles/page.tsx) — roles listing and how slugs are generated via `slugify`.
-- [app/roles/[slug]/page.tsx](app/roles/[slug]/page.tsx) — role detail page, server-side fetched via Drizzle queries.
-- [db/queries.ts](db/queries.ts) — the SQL/ORM queries used by the app.
-- [db/schema.ts](db/schema.ts) — Drizzle schema definitions.
-
-## Local development
-
-Prerequisites
-
-- Node.js 18+ (LTS) or newer
-- A Postgres database (local Postgres, Docker, or Neon). You must have a `DATABASE_URL` env var available.
-
-Install dependencies and run dev server:
+### Quick start (full stack)
 
 ```bash
+# 1. Clone and install
+git clone <repo-url>
+cd job-postings-analysis-app
 npm install
+
+# 2. Configure environment
+cp .env.local.example .env.local
+# Edit .env.local — set DATABASE_URL, ADZUNA_APP_ID, ADZUNA_APP_KEY
+
+# 3. Start everything (Next.js + ML service + MLflow)
+docker compose up
+
+# Or just the Next.js frontend (no ML):
 npm run dev
 ```
 
 Open http://localhost:3000.
 
-Useful scripts (in `package.json`):
+### Environment variables
 
-- `npm run dev` — run Next dev server
-- `npm run build` — build for production
-- `npm run start` — start production server
-- `npm run db:generate` — generate types from Drizzle (drizzle-kit)
-- `npm run db:migrate` — run migration helper (`tsx ./db/migrate.ts`)
-- `npm run db:test` — quick DB connectivity / query test script
+```bash
+# Required
+DATABASE_URL=postgresql://user:pass@host/dbname   # Neon connection string
+ADZUNA_APP_ID=your_app_id
+ADZUNA_APP_KEY=your_app_key
 
-Environment variables
-
-Create a `.env.local` with at least:
-
-```
-DATABASE_URL=postgres://user:pass@host:5432/dbname
+# ML service (optional for local dev without Docker)
 ML_SERVICE_URL=http://localhost:8000
 ML_SERVICE_KEY=local-ml-shared-key
+
+# Optional Adzuna import config
+ADZUNA_DAILY_LIMIT=200
+ADZUNA_MAX_PAGES=5
 ```
 
-If using Neon or serverless Postgres, set the connection string accordingly.
+---
 
-## Database & data loading
+## Database Setup
 
-The project ships with CSV exports in `PSQL Data Loader/`. There are two main import paths:
+```bash
+# Apply schema migrations
+npm run db:migrate
 
-- A Python loader (`PSQL Data Loader/psql_loader.py`) for offline bulk import to a Postgres instance.
-- Smaller TypeScript helper scripts under `scripts/` and `db/` to run transformations and migrations.
-
-High-level import steps:
-
-1. Prepare a Postgres instance and set `DATABASE_URL`.
-2. Run schema migrations (see `db/migrate.ts` / `drizzle-kit`).
-3. Use the provided loader (Python or TS) to bulk-insert CSV rows into the `postings` and `companies` tables.
-
-Notes on data size: the CSV dataset included in this repo can be large; the loader scripts assume you have sufficient disk and DB capacity.
-
-## Migrations and schema management
-
-This repo uses Drizzle + drizzle-kit for schema and migrations. Typical workflow:
-
-1. Edit `db/schema.ts` to alter table definitions.
-2. Run `npm run db:generate` to regenerate types (if configured).
-3. Run `npm run db:migrate` to apply the migration helper (this project uses `db/migrate.ts`).
-
-The `db/migrations/` folder contains generated SQL migration files.
-
-## Key implementation notes
-
-- Server vs Client components: The app primarily uses server components for pages and data fetching (async components). Components that use browser-only APIs or state use `"use client"` at the top (see `components/ui/role-card.tsx`).
-
-- Slug generation: Titles are slugified with `lib/slugify.ts`. Defensive checks are required because malformed or empty titles can yield an empty slug. The roles listing uses `href={`/roles/${slugify(r.title)}`}` — ensure the slug is non-empty before rendering a link.
-
-- Queries: All DB access is centralized in `db/queries.ts`. These functions return raw Drizzle results which are then rendered by server components.
-
-- Charts and visuals: Sparklines / charts use `recharts` and simple SVG helpers in `components/ui/`.
-
-## Deployment guidance
-
-- Environment: Deploy to Vercel for the simplest Next.js experience. Set `DATABASE_URL` in the project environment.
-- Build: `npm run build` then `npm run start` (Vercel will handle this for you).
-
-If you deploy to a platform other than Vercel, ensure Node 18+ and the same environment variables are available.
-
-### ML Deployment (Vercel + Fly)
-
-The ML feature set is salary-only and is served by a separate FastAPI service (`ml-service/`) proxied through Next route handlers:
-- Deploy `ml-service/` to Fly (or equivalent)
-- Set `ML_SERVICE_URL` in Vercel to the ML service base URL
-- Set `ML_SERVICE_KEY` on both Vercel and Fly to the same shared secret
-
-Retired endpoints:
-- Next.js: `/api/ml/clusters*`, `/api/ml/skill-gap*` return `410`
-- FastAPI: `/api/v1/clusters*`, `/api/v1/skill-gap*` return `410`
-
-Cost controls implemented in this repo:
-- Proxy-side soft rate limits on `/api/ml/*`
-- ML service hard rate limits per endpoint class + global
-- Optional heavy-inference kill switch
-- Salary metadata degradation fallback on proxy errors
-
-Operational guide:
-- `docs/ml-cost-control-runbook.md`
-
-## Troubleshooting & common issues
-
-- TypeError: `Cannot read properties of undefined (reading 'split')` — This indicates a missing `slug` param in `app/roles/[slug]/page.tsx` when the route param isn't present or is an array. Guard the route with null-checks and call `notFound()` to render the 404 instead of crashing. Example:
-
-```ts
-const slugStr = Array.isArray(slug) ? slug.join("-") : (slug ?? "");
-if (!slugStr) notFound();
+# Regenerate Drizzle types after schema changes
+npm run db:generate
 ```
 
-- Empty slugs in listing — ensure `slugify(title)` returns a value before rendering an `href`. If `slugify` returns an empty string (title contains only filtered characters), do not render the link.
+---
 
-- Database connectivity errors — confirm `DATABASE_URL`, that the DB is running, and that migrations were applied.
+## Data Import
 
+The ETL pipeline pulls job postings from the Adzuna API with built-in rate limiting (2.5s between requests) and quota tracking (`.adzuna-usage.json`).
 
-## Useful files and quick references
+```bash
+# Dry run — preview what would be imported (no DB writes)
+npm run preview:adzuna
 
-- `app/roles/page.tsx` — roles listing
-- `app/roles/[slug]/page.tsx` — role detail
-- `components/ui/role-card.tsx` — role card component
-- `lib/slugify.ts` — slug helper
-- `db/queries.ts` — all DB queries
-- `db/schema.ts` — schema definitions
-- `db/migrate.ts` — migration helper script
-- `PSQL Data Loader/` — CSVs and import tools
+# Full import
+npm run import:adzuna
+
+# Remove duplicate companies after import
+npm run cleanup:companies
+
+# Geocode company locations (lat/lng for heatmap)
+npm run geocode
+```
+
+---
+
+## ML Service
+
+The salary predictor runs as a separate FastAPI service. Models are pre-trained LightGBM quantile regressors stored in `ml-service/models/`.
+
+### Retrain models
+
+```bash
+cd ml-service
+pip install -r requirements.txt
+
+# Export training data from Postgres
+python training/export_data.py
+
+# Train all quantile models (median, P10, P90) — logs to MLflow
+python training/train_all.py
+
+# Promote best run to production
+python training/promote_model.py
+```
+
+### Start ML service locally
+
+```bash
+cd ml-service
+uvicorn app.main:app --reload --port 8000
+```
+
+Interactive API docs: http://localhost:8000/docs
+
+### MLflow UI
+
+```bash
+docker compose up mlflow
+# Open http://localhost:5001
+```
+
+---
+
+## Key Design Decisions
+
+- **Why Drizzle ORM?** Lightweight, TypeScript-native, no runtime code generation overhead. Queries are plain SQL-like expressions — easy to audit and optimize.
+- **Why LightGBM for salary prediction?** Handles non-linear interactions between skills, title, and location without feature engineering. Native support for quantile loss allows simultaneous P10/P50/P90 training.
+- **Why nuqs for filter state?** URL-first state keeps every filter combination bookmarkable and shareable without a client-side state manager.
+- **Why Neon (serverless Postgres)?** Auto-scales to zero between ETL imports, eliminating idle database cost for a low-traffic portfolio project while maintaining full Postgres compatibility.
+- **Why streaming SSR?** Heavy analytics pages use React `<Suspense>` boundaries so the page shell loads immediately while expensive DB queries stream in progressively — measurable improvement in Time to First Byte.
+
+---
+
+## QA & Testing
+
+```bash
+# QA smoke tests (all routes return 2xx, invalid slugs return 404)
+npm run qa:smoke
+
+# Data integrity checks
+npm run qa:data
+
+# Full QA suite
+npm run qa:full
+
+# E2E tests (requires running app on localhost:3000)
+npm run test:e2e
+
+# E2E with interactive browser UI
+npm run test:e2e:ui
+```
+
+E2E tests cover: homepage stats, roles filter + slug navigation, skills view toggle + export, salary predictor form, locations map tab.
+
+---
+
+## Deployment
+
+### Vercel (frontend)
+
+1. Connect the repo to Vercel.
+2. Set environment variables in the Vercel dashboard:
+   - `DATABASE_URL`
+   - `ML_SERVICE_URL` — Fly.io ML service URL
+   - `ML_SERVICE_KEY` — shared secret
+3. Deploy. ISR revalidation is set to 1800s (30 min).
+
+### Fly.io (ML service)
+
+```bash
+cd ml-service
+fly launch          # first time
+fly deploy          # subsequent deploys
+fly secrets set ML_SERVICE_KEY=your-secret DATABASE_URL=your-db-url
+fly status          # confirm healthy
+```
+
+Health check: `GET /api/v1/health` → `{"status": "ok", "models_loaded": true}`
+
+---
+
+## Page / Route Map
+
+| Route | Description |
+|-------|-------------|
+| `/` | Homepage: hero stats, trending skills, quick-action grid |
+| `/roles` | Role listing with filters (experience, salary, search) + charts |
+| `/roles/[slug]` | Role detail: salary stats, top skills, radar chart, ML prediction |
+| `/skills` | Skills explorer with demand/salary scatter + co-occurrence matrix |
+| `/skills/[slug]` | Skill detail: timeline, top companies |
+| `/companies` | Company listing with salary benchmarks + comparison panel |
+| `/companies/[slug]` | Company detail: hiring momentum, location footprint, salary bands |
+| `/locations` | Locations overview with Leaflet heatmap + market scatter plot |
+| `/locations/[slug]` | Location detail: salary distribution, skill/company breakdown |
+| `/trends` | 30-day trending skills with growth rates |
+| `/intelligence/salary-predictor` | ML salary predictor with P10/P90 confidence interval |
+| `/data-health` | Database coverage and data quality dashboard |
+
+---
+
+## CI / CD
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `qa-gate.yml` | push/PR | Build + lint + QA smoke + data integrity |
+| `e2e.yml` | push/PR | Playwright E2E tests (5 flows) |
+| `lighthouse.yml` | PR | Lighthouse CI performance/accessibility audit |
+| `daily-adzuna-import.yml` | cron daily | Pulls fresh job postings via Adzuna API |
+| `weekly-ml-retrain.yml` | cron weekly | Retrains salary models with latest data |

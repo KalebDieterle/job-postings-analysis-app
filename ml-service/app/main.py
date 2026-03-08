@@ -69,9 +69,20 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Job Market Intelligence API",
+    title="Job Market ML Service",
+    description=(
+        "LightGBM salary prediction API with P10/P90 confidence intervals. "
+        "Trained on real job postings data. Use `/api/v1/salary/metadata` to "
+        "discover valid skills and titles before calling `/api/v1/salary/predict`.\n\n"
+        "**Authentication:** All endpoints (except `/api/v1/health`) require the "
+        "`x-ml-service-key` header with the shared ML service secret."
+    ),
     version=settings.version,
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    contact={"name": "Job Market Analytics", "url": "https://github.com"},
+    license_info={"name": "MIT"},
 )
 
 # CORS

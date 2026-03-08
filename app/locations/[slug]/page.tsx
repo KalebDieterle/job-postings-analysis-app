@@ -1,6 +1,7 @@
 ﻿// Data updates throughout the day; ISR keeps pages fresh without forcing per-request SSR.
 export const revalidate = 1800;
 
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   getLocationStats,
@@ -78,6 +79,27 @@ const STATE_ABBREVIATIONS: Record<string, string> = {
   "district-of-columbia": "dc",
   "puerto-rico": "pr",
 };
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  if (!slug) return { title: "Location Not Found" };
+
+  const stats = await getLocationStats(slug);
+  if (!stats) return { title: "Location Not Found" };
+
+  const locationName = [stats.city, stats.state, stats.country].filter(Boolean).join(", ");
+  const totalJobs = Number(stats.totalJobs ?? 0);
+
+  return {
+    title: `${locationName} Tech Jobs — Salary & Market Data`,
+    description: `${totalJobs.toLocaleString()} tech job postings in ${locationName}. Explore salary benchmarks, top companies, and in-demand skills.`,
+    openGraph: {
+      title: `${locationName} | Job Market Analytics`,
+      description: `Live job market data for ${locationName}: roles, salaries, and hiring trends.`,
+      type: "website",
+    },
+  };
+}
 
 export default async function LocationDetailPage({ params }: PageProps) {
   const { slug: locationSlug } = await params;

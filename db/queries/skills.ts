@@ -13,4 +13,5 @@ export {
   getCategoryDistribution,
   getSkillsAdvancedStats,
   getRelatedSkillsEnhanced,
+  getSkillCooccurrence,
 } from "./shared";

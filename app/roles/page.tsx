@@ -29,6 +29,7 @@ import { FilterBar } from "@/components/ui/filters/filter-bar";
 import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 import { MobileStickyActions } from "@/components/ui/mobile/mobile-sticky-actions";
+import { RoleExportActions } from "@/components/ui/roles/export-actions";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -84,6 +85,15 @@ export default async function RolesPage({ searchParams }: PageProps) {
           title="Explore Roles"
           subtitle={`${totalRoles.toLocaleString()} postings across all roles`}
           compact
+          actions={
+            <RoleExportActions
+              data={roles.map((r: any) => ({
+                title: r.title,
+                count: Number(r.count),
+                medianSalary: salaryMap.get(r.title),
+              }))}
+            />
+          }
         />
 
         {/* Stats Grid */}

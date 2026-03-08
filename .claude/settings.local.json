@@ -10,7 +10,10 @@
       "Bash(uv:*)",
       "Bash(py:*)",
       "Bash(pip install:*)",
-      "WebFetch(domain:documenter.getpostman.com)"
+      "WebFetch(domain:documenter.getpostman.com)",
+      "Bash(ls -la /home/kalebd/Documents/coding/job-postings-analysis-app/*.json /home/kalebd/Documents/coding/job-postings-analysis-app/*.yml /home/kalebd/Documents/coding/job-postings-analysis-app/*.toml)",
+      "Bash(wc -l /home/kalebd/Documents/coding/job-postings-analysis-app/db/queries/*.ts)",
+      "Bash(wc -l /home/kalebd/Documents/coding/job-postings-analysis-app/app/**/*.tsx /home/kalebd/Documents/coding/job-postings-analysis-app/app/**/*.ts)"
     ]
   }
 }
