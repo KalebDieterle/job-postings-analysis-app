@@ -1,0 +1,7 @@
+artifact_location: mlflow-artifacts:/848063522050276038
+creation_time: 1773006367788
+experiment_id: '848063522050276038'
+last_update_time: 1773006367788
+lifecycle_stage: active
+name: salary-prediction
+workspace: default

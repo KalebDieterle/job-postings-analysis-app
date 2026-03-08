@@ -1,0 +1,14 @@
+artifact_uri: mlflow-artifacts:/848063522050276038/e9b016959aa14c4b8cddf05a3c3232f1/artifacts
+end_time: 1773008410615
+entry_point_name: ''
+experiment_id: '848063522050276038'
+lifecycle_stage: active
+run_id: e9b016959aa14c4b8cddf05a3c3232f1
+run_name: dashing-flea-259
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1773008410186
+status: 3
+tags: []
+user_id: kalebd

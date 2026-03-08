@@ -18,7 +18,7 @@ jobs:
   retrain-and-deploy:
     name: Train ML Models & Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -53,6 +53,21 @@ jobs:
           # Check that critical files exist
           test -f models/salary_median.lgb || (echo "Missing salary_median.lgb" && exit 1)
           test -f models/salary_encoders.joblib || (echo "Missing salary_encoders.joblib" && exit 1)
+          test -f models/training_metrics.json || (echo "Missing training_metrics.json" && exit 1)
+
+      - name: Model quality gate
+        working-directory: ml-service
+        run: |
+          set -euo pipefail
+          MAE_FLOOR=35000
+          mae=$(python3 -c "import json; d=json.load(open('models/training_metrics.json')); print(d['mae'])")
+          echo "Training MAE: $mae"
+          python3 -c "
+          mae = float('$mae')
+          if mae > $MAE_FLOOR:
+              raise SystemExit(f'Quality gate FAILED: MAE \${mae:,.0f} exceeds floor \$$MAE_FLOOR')
+          print(f'Quality gate PASSED: MAE \${mae:,.0f} <= floor \$$MAE_FLOOR')
+          "
 
       - name: Enforce salary-only model artifacts
         working-directory: ml-service
@@ -74,15 +89,16 @@ jobs:
           fi
 
           allowed_paths=(
-            "ml-service/models/salary_median.lgb"
-            "ml-service/models/salary_p10.lgb"
-            "ml-service/models/salary_p90.lgb"
-            "ml-service/models/salary_encoders.joblib"
-            "ml-service/models/salary_feature_columns.joblib"
-            "ml-service/models/salary_skill_vocab.joblib"
-            "ml-service/models/salary_company_scale_meta.joblib"
-            "ml-service/models/salary_titles.joblib"
-            "ml-service/models/salary_premiums.joblib"
+            "models/salary_median.lgb"
+            "models/salary_p10.lgb"
+            "models/salary_p90.lgb"
+            "models/salary_encoders.joblib"
+            "models/salary_feature_columns.joblib"
+            "models/salary_skill_vocab.joblib"
+            "models/salary_company_scale_meta.joblib"
+            "models/salary_titles.joblib"
+            "models/salary_premiums.joblib"
+            "models/training_metrics.json"
           )
 
           for changed_path in "${changed_model_paths[@]}"; do
@@ -117,7 +133,32 @@ jobs:
             echo "FLY_API_TOKEN not set — skipping deployment"
           fi
 
+      - name: Post-deploy health check
+        if: success()
+        run: |
+          set -euo pipefail
+          HEALTH_URL="https://skillmap-ml.fly.dev/api/v1/health"
+          echo "Polling $HEALTH_URL ..."
+          for i in 1 2 3 4 5; do
+            RESPONSE=$(curl -sf --max-time 10 "$HEALTH_URL" || true)
+            MODELS_LOADED=$(echo "$RESPONSE" | python3 -c \
+              "import sys,json; d=json.load(sys.stdin); print(d.get('models_loaded', False))" \
+              2>/dev/null || echo "false")
+            if [ "$MODELS_LOADED" = "True" ]; then
+              echo "Health check PASSED (attempt $i): models_loaded=true"
+              exit 0
+            fi
+            echo "Attempt $i: models_loaded=$MODELS_LOADED — retrying in 15s..."
+            sleep 15
+          done
+          echo "Health check FAILED after 5 attempts."
+          exit 1
+
       - name: Training summary
         if: always()
         run: |
           echo "Retraining completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ -f ml-service/models/training_metrics.json ]; then
+            echo "--- Training Metrics ---"
+            cat ml-service/models/training_metrics.json
+          fi

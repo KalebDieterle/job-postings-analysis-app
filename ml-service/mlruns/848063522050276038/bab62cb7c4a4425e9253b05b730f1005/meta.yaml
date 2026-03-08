@@ -1,0 +1,14 @@
+artifact_uri: mlflow-artifacts:/848063522050276038/bab62cb7c4a4425e9253b05b730f1005/artifacts
+end_time: 1773006368143
+entry_point_name: ''
+experiment_id: '848063522050276038'
+lifecycle_stage: active
+run_id: bab62cb7c4a4425e9253b05b730f1005
+run_name: aged-colt-924
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1773006367873
+status: 3
+tags: []
+user_id: kalebd

@@ -1,5 +1,7 @@
 """Train LightGBM salary prediction models (median, P10, P90)."""
 
+import datetime
+import json
 import os
 import subprocess
 import tempfile
@@ -187,13 +189,9 @@ def build_features(
             "title": str(row.get("canonical_title", "") or "").lower(),
             "city": city,
             "state": state,
-            "country": str(row.get("country", "") or "").lower(),
             "experience_ordinal": exp_ord,
             "work_type": str(row.get("formatted_work_type", "") or "").lower(),
             "remote_allowed": _coerce_remote_allowed(row.get("remote_allowed")),
-            "has_employee_count": 1 if pd.notna(row.get("employee_count")) else 0,
-            "log_employee_count": float(np.log1p(row["employee_count"])) if pd.notna(row.get("employee_count")) else 0.0,
-            "has_company_posting_count": has_company_posting_count,
             "company_posting_count": posting_count_value,
             "log_company_posting_count": float(np.log1p(posting_count_value)) if posting_count_value > 0 else 0.0,
             "company_scale_tier_proxy": company_scale_tier,
@@ -403,7 +401,7 @@ def train(
         feat_df, target, test_size=0.2, random_state=42
     )
 
-    cat_cols = ["title", "city", "state", "country", "work_type", "company_scale_tier_proxy"]
+    cat_cols = ["title", "city", "state", "work_type", "company_scale_tier_proxy"]
     target_encoder = TargetEncoder(cols=cat_cols, smoothing=10)
     X_train[cat_cols] = target_encoder.fit_transform(X_train[cat_cols], y_train)
     X_test[cat_cols] = target_encoder.transform(X_test[cat_cols])
@@ -413,7 +411,14 @@ def train(
     lgb_train = lgb.Dataset(X_train, label=y_train)
     lgb_test = lgb.Dataset(X_test, label=y_test, reference=lgb_train)
 
-    base_params = {
+    # Separate datasets for quantile models — min_data_in_leaf differs from median,
+    # and LightGBM freezes dataset params on first construction.
+    lgb_train_q = lgb.Dataset(X_train, label=y_train, free_raw_data=False)
+    lgb_test_q = lgb.Dataset(X_test, label=y_test, reference=lgb_train_q, free_raw_data=False)
+
+    params_median = {
+        "objective": "mae",
+        "metric": "mae",
         "num_leaves": 63,
         "learning_rate": 0.05,
         "feature_fraction": 0.8,
@@ -424,36 +429,51 @@ def train(
         "n_jobs": -1,
     }
 
+    params_quantile_base = {
+        "objective": "quantile",
+        "metric": "quantile",
+        "num_leaves": 31,
+        "learning_rate": 0.02,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 5,
+        "min_data_in_leaf": 20,
+        "verbose": -1,
+        "n_jobs": -1,
+    }
+
+    params_p10 = {**params_quantile_base, "alpha": 0.1}
+    params_p90 = {**params_quantile_base, "alpha": 0.9}
+
     models: dict[str, lgb.Booster] = {}
 
     print("\nTraining median model (MAE)...")
-    params_median = {**base_params, "objective": "mae", "metric": "mae"}
     models["salary_median"] = lgb.train(
         params_median,
         lgb_train,
-        num_boost_round=500,
+        num_boost_round=1500,
         valid_sets=[lgb_test],
-        callbacks=[lgb.log_evaluation(100), lgb.early_stopping(50)],
+        callbacks=[lgb.log_evaluation(100), lgb.early_stopping(100)],
     )
 
     print("\nTraining P10 model (quantile 0.1)...")
-    params_p10 = {**base_params, "objective": "quantile", "alpha": 0.1, "metric": "quantile"}
     models["salary_p10"] = lgb.train(
         params_p10,
-        lgb_train,
-        num_boost_round=500,
-        valid_sets=[lgb_test],
-        callbacks=[lgb.log_evaluation(100), lgb.early_stopping(50)],
+        lgb_train_q,
+        num_boost_round=800,
+        valid_sets=[lgb_test_q],
+        callbacks=[lgb.log_evaluation(100), lgb.early_stopping(80)],
     )
 
     print("\nTraining P90 model (quantile 0.9)...")
-    params_p90 = {**base_params, "objective": "quantile", "alpha": 0.9, "metric": "quantile"}
+    lgb_train_q90 = lgb.Dataset(X_train, label=y_train, free_raw_data=False)
+    lgb_test_q90 = lgb.Dataset(X_test, label=y_test, reference=lgb_train_q90, free_raw_data=False)
     models["salary_p90"] = lgb.train(
         params_p90,
-        lgb_train,
-        num_boost_round=500,
-        valid_sets=[lgb_test],
-        callbacks=[lgb.log_evaluation(100), lgb.early_stopping(50)],
+        lgb_train_q90,
+        num_boost_round=800,
+        valid_sets=[lgb_test_q90],
+        callbacks=[lgb.log_evaluation(100), lgb.early_stopping(80)],
     )
 
     preds_median = models["salary_median"].predict(X_test)
@@ -476,6 +496,25 @@ def train(
     print(f"P90 pinball: {p90_pinball:,.0f}")
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    training_metrics = {
+        "mae": mae,
+        "rmse": rmse,
+        "r2": r2,
+        "mape": mape,
+        "p10_pinball": p10_pinball,
+        "p90_pinball": p90_pinball,
+        "n_iterations_median": models["salary_median"].num_trees(),
+        "n_iterations_p10": models["salary_p10"].num_trees(),
+        "n_iterations_p90": models["salary_p90"].num_trees(),
+        "n_train": len(X_train),
+        "n_test": len(X_test),
+        "n_features": len(feature_columns),
+        "trained_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    with open(MODEL_DIR / "training_metrics.json", "w") as f:
+        json.dump(training_metrics, f, indent=2)
+    print("Saved training_metrics.json")
 
     for name, model in models.items():
         path = MODEL_DIR / f"{name}.lgb"
@@ -549,15 +588,23 @@ def train(
             })
 
             mlflow.log_params({
-                # Hyperparameters
-                "num_leaves": base_params["num_leaves"],
-                "learning_rate": base_params["learning_rate"],
-                "feature_fraction": base_params["feature_fraction"],
-                "bagging_fraction": base_params["bagging_fraction"],
-                "bagging_freq": base_params["bagging_freq"],
-                "min_data_in_leaf": base_params["min_data_in_leaf"],
-                "num_boost_round": 500,
-                "early_stopping": 50,
+                # Median model hyperparameters
+                "median_num_leaves": params_median["num_leaves"],
+                "median_learning_rate": params_median["learning_rate"],
+                "median_feature_fraction": params_median["feature_fraction"],
+                "median_bagging_fraction": params_median["bagging_fraction"],
+                "median_min_data_in_leaf": params_median["min_data_in_leaf"],
+                # Quantile model hyperparameters
+                "quantile_num_leaves": params_quantile_base["num_leaves"],
+                "quantile_learning_rate": params_quantile_base["learning_rate"],
+                "quantile_feature_fraction": params_quantile_base["feature_fraction"],
+                "quantile_bagging_fraction": params_quantile_base["bagging_fraction"],
+                "quantile_min_data_in_leaf": params_quantile_base["min_data_in_leaf"],
+                # Training budgets
+                "num_boost_round_median": 1500,
+                "num_boost_round_quantile": 800,
+                "early_stopping_median": 100,
+                "early_stopping_quantile": 80,
                 # Actual iterations
                 "n_iterations_median": models["salary_median"].num_trees(),
                 "n_iterations_p10": models["salary_p10"].num_trees(),
@@ -594,6 +641,7 @@ def train(
                 "salary_company_scale_meta.joblib",
                 "salary_titles.joblib",
                 "salary_premiums.joblib",
+                "training_metrics.json",
             ]:
                 mlflow.log_artifact(str(MODEL_DIR / artifact_name))
 

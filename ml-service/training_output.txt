@@ -1,0 +1,59 @@
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.prefix, expected /home/kalebd/Documents/coding/job-postings-analysis-app/ml-service/.venv, got /home/kalebd/Documents/coding/job-postings-analysis-app/ml-service/training/../.venv
+<frozen site>:101: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /home/kalebd/Documents/coding/job-postings-analysis-app/ml-service/.venv, got /home/kalebd/Documents/coding/job-postings-analysis-app/ml-service/training/../.venv
+/home/kalebd/Documents/coding/job-postings-analysis-app/ml-service/training/export_data.py:98: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  df = pd.read_sql(query, conn)
+/home/kalebd/Documents/coding/job-postings-analysis-app/ml-service/training/export_data.py:122: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  df = pd.read_sql(query, conn)
+2026/03/08 16:46:07 INFO mlflow.tracking.fluent: Experiment with name 'salary-prediction' does not exist. Creating a new experiment.
+============================================================
+Training salary models (legacy models retired)
+============================================================
+
+[1/1] Salary prediction models...
+=== Salary Model Training ===
+Exported 107554 salary training rows
+Exported 35 salary skill vocabulary entries
+Features: 68 | Samples: 107554
+Target range: $20,000 - $498,352 (median $93,917)
+
+Training median model (MAE)...
+Training until validation scores don't improve for 50 rounds
+[100]	valid_0's l1: 28754.8
+[200]	valid_0's l1: 28410.2
+[300]	valid_0's l1: 28072.8
+[400]	valid_0's l1: 27851.7
+[500]	valid_0's l1: 27682.5
+Did not meet early stopping. Best iteration is:
+[500]	valid_0's l1: 27682.5
+
+Training P10 model (quantile 0.1)...
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[21]	valid_0's quantile: 6450.67
+
+Training P90 model (quantile 0.9)...
+Training until validation scores don't improve for 50 rounds
+Early stopping, best iteration is:
+[22]	valid_0's quantile: 9815.2
+
+=== Evaluation ===
+MAE:  $27,682
+RMSE: $41,201
+MAPE: 34.4%
+R^2:  0.4786
+P10 pinball: 6,451
+P90 pinball: 9,815
+Saved ../models/salary_median.lgb
+Saved ../models/salary_p10.lgb
+Saved ../models/salary_p90.lgb
+Saved encoders, feature columns, salary vocab, scale metadata, titles, and premiums
+🏃 View run aged-colt-924 at: http://localhost:5000/#/experiments/848063522050276038/runs/bab62cb7c4a4425e9253b05b730f1005
+🧪 View experiment at: http://localhost:5000/#/experiments/848063522050276038
+
+MLflow run ID: bab62cb7c4a4425e9253b05b730f1005
+
+============================================================
+Salary training complete.
+Legacy TF-IDF and clustering models are retired.
+MLflow run: http://localhost:5000/#/runs/bab62cb7c4a4425e9253b05b730f1005
+============================================================
