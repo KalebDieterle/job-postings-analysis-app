@@ -117,7 +117,26 @@ jobs:
             fi
           done
 
+      - name: Local ML health contract smoke test
+        working-directory: ml-service
+        run: python3 -m tests.health_contract_check
+
+      - name: Run ML health regression tests
+        working-directory: ml-service
+        run: python3 -m unittest discover -s tests -p 'test_health.py'
+
       - name: Deploy to Fly.io
+        if: success()
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "FLY_API_TOKEN secret is required for weekly retrain deployments."
+            exit 1
+          fi
+        shell: bash
+
+      - name: Setup flyctl
         if: success()
         uses: superfly/flyctl-actions/setup-flyctl@master
 
@@ -127,11 +146,7 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          if [ -n "$FLY_API_TOKEN" ]; then
-            flyctl deploy --remote-only
-          else
-            echo "FLY_API_TOKEN not set — skipping deployment"
-          fi
+          flyctl deploy --remote-only
 
       - name: Post-deploy health check
         if: success()
@@ -141,14 +156,13 @@ jobs:
           echo "Polling $HEALTH_URL ..."
           for i in 1 2 3 4 5; do
             RESPONSE=$(curl -sf --max-time 10 "$HEALTH_URL" || true)
-            MODELS_LOADED=$(echo "$RESPONSE" | python3 -c \
-              "import sys,json; d=json.load(sys.stdin); print(d.get('models_loaded', False))" \
-              2>/dev/null || echo "false")
-            if [ "$MODELS_LOADED" = "True" ]; then
-              echo "Health check PASSED (attempt $i): models_loaded=true"
+            if VALIDATION_RESULT=$(printf '%s' "$RESPONSE" | python3 -m tests.health_contract_check --stdin-json 2>&1); then
+              echo "Health check PASSED (attempt $i): $VALIDATION_RESULT"
               exit 0
             fi
-            echo "Attempt $i: models_loaded=$MODELS_LOADED — retrying in 15s..."
+            echo "Attempt $i failed: ${VALIDATION_RESULT:-invalid response}"
+            echo "Raw health response: ${RESPONSE:-<empty>}"
+            echo "Retrying in 15s..."
             sleep 15
           done
           echo "Health check FAILED after 5 attempts."
