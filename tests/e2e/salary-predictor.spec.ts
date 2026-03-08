@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Salary Predictor", () => {
   test("page loads with form", async ({ page }) => {
     await page.goto("/intelligence/salary-predictor");
-    await expect(page.locator("h1").filter({ hasText: /salary/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("h1").filter({ hasText: /salary/i }).nth(1)).toBeVisible({ timeout: 15_000 });
     // Form should be present
     await expect(page.locator("form, [role='form'], input, select, button").first()).toBeVisible();
   });
