@@ -89,16 +89,16 @@ jobs:
           fi
 
           allowed_paths=(
-            "models/salary_median.lgb"
-            "models/salary_p10.lgb"
-            "models/salary_p90.lgb"
-            "models/salary_encoders.joblib"
-            "models/salary_feature_columns.joblib"
-            "models/salary_skill_vocab.joblib"
-            "models/salary_company_scale_meta.joblib"
-            "models/salary_titles.joblib"
-            "models/salary_premiums.joblib"
-            "models/training_metrics.json"
+            "ml-service/models/salary_median.lgb"
+            "ml-service/models/salary_p10.lgb"
+            "ml-service/models/salary_p90.lgb"
+            "ml-service/models/salary_encoders.joblib"
+            "ml-service/models/salary_feature_columns.joblib"
+            "ml-service/models/salary_skill_vocab.joblib"
+            "ml-service/models/salary_company_scale_meta.joblib"
+            "ml-service/models/salary_titles.joblib"
+            "ml-service/models/salary_premiums.joblib"
+            "ml-service/models/training_metrics.json"
           )
 
           for changed_path in "${changed_model_paths[@]}"; do
