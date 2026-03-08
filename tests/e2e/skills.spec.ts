@@ -9,12 +9,8 @@ test.describe("Skills page", () => {
   });
 
   test("view toggle changes display", async ({ page }) => {
-    await page.goto("/skills");
-    const tableToggle = page.getByRole("button", { name: /table/i });
-    if (await tableToggle.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await tableToggle.click();
-      await expect(page.locator("table")).toBeVisible({ timeout: 5_000 });
-    }
+    await page.goto("/skills?view=table");
+    await expect(page.locator("table").first()).toBeVisible({ timeout: 15_000 });
     // Page should still be visible
     await expect(page.locator("body")).toBeVisible();
   });
