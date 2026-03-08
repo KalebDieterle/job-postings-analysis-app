@@ -150,6 +150,7 @@ jobs:
 
       - name: Post-deploy health check
         if: success()
+        working-directory: ml-service
         run: |
           set -euo pipefail
           HEALTH_URL="https://skillmap-ml.fly.dev/api/v1/health"
