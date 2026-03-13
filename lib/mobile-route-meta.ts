@@ -4,6 +4,7 @@ import {
   Building2,
   Home,
   MapPin,
+  ShieldCheck,
   Sparkles,
   TrendingUp,
   Wrench,
@@ -64,6 +65,11 @@ export const DRAWER_SECONDARY_ITEMS = [
     title: "Salary Predictor",
     url: "/intelligence/salary-predictor",
     icon: Sparkles,
+  },
+  {
+    title: "Backend",
+    url: "/admin",
+    icon: ShieldCheck,
   },
 ] as const;
 
@@ -126,6 +132,11 @@ const ROUTE_RULES: Array<{
   {
     test: (pathname) => pathname.startsWith("/intelligence"),
     title: "Intelligence",
+    navHref: null,
+  },
+  {
+    test: (pathname) => pathname.startsWith("/admin"),
+    title: "Backend Data",
     navHref: null,
   },
 ];

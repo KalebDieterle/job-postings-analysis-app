@@ -47,14 +47,15 @@ function CompanyCard({ company }: { company: CompanyData }) {
           </div>
         </div>
         
-        <div className="flex items-center justify-between pt-2 border-t">
+        <div className="pt-2 border-t space-y-3">
           <div className="flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-green-600" />
             <span className="font-semibold">
-              ${((company.median_salary ?? company.avg_salary) / 1000).toFixed(0)}k median
+              ${((company.median_salary ?? company.avg_salary) / 1000).toFixed(0)}k
             </span>
+            <span className="text-sm text-muted-foreground">median salary</span>
           </div>
-          <Button asChild size="sm" variant="outline">
+          <Button asChild size="sm" variant="outline" className="w-full">
             <Link href={`/companies/${encodeURIComponent(slug)}`}>
               View Company
             </Link>
