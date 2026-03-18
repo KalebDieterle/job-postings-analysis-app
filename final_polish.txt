@@ -1,0 +1,14 @@
+- Fix random inaccurate percentages, such as "Total Job Postings
+156,126
+
+?+4614% this month
+"
+It is marked as this on production/vercel:
+"Total Job Postings
+156,126
+
+?+54390% this month
+"
+
+- Polish UI to make it look less generic and ai generated.
+- 

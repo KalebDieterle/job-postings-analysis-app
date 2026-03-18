@@ -2544,17 +2544,20 @@ export async function getTotalStats() {
   const stats = result.rows[0];
   
   // Calculate monthly growth (last 30 days vs previous 30 days)
+  // Only consider data from the last 6 months to ignore stale imports
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const sixtyDaysAgo = new Date();
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
   const growthResult = await db.execute<{ current: number; previous: number }>(sql`
-    SELECT 
-      -- Now that listed_time is a TIMESTAMP, compare it directly
-      COUNT(*) FILTER (WHERE listed_time >= ${thirtyDaysAgo.toISOString()}::timestamp)::int as current,
-      COUNT(*) FILTER (WHERE listed_time >= ${sixtyDaysAgo.toISOString()}::timestamp 
-                         AND listed_time < ${thirtyDaysAgo.toISOString()}::timestamp)::int as previous
+    SELECT
+      COUNT(*) FILTER (WHERE listed_time >= ${thirtyDaysAgo.toISOString()}::timestamp AND listed_time >= ${sixMonthsAgo.toISOString()}::timestamp)::int as current,
+      COUNT(*) FILTER (WHERE listed_time >= ${sixtyDaysAgo.toISOString()}::timestamp
+                         AND listed_time < ${thirtyDaysAgo.toISOString()}::timestamp
+                         AND listed_time >= ${sixMonthsAgo.toISOString()}::timestamp)::int as previous
     FROM "postings"
   `);
 
