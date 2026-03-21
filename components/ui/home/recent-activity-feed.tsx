@@ -1,7 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { MapPin, Building2, Clock, DollarSign } from "lucide-react";
 
 interface RecentPosting {
   job_id: string;
@@ -22,72 +19,102 @@ function formatTimeAgo(timestamp: Date): string {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffDays > 0) return `${diffDays}d ago`;
-  if (diffHours > 0) return `${diffHours}h ago`;
-  if (diffMins > 0) return `${diffMins}m ago`;
-  return "Just now";
+  if (diffDays > 0) return `${diffDays}D_AGO`;
+  if (diffHours > 0) return `${diffHours}H_AGO`;
+  if (diffMins > 0) return `${diffMins}M_AGO`;
+  return "JUST_NOW";
 }
 
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength) + "...";
+function formatDate(timestamp: Date): string {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function truncate(text: string, max: number): string {
+  return text.length <= max ? text : text.slice(0, max) + "...";
 }
 
 export function RecentActivityFeed({ data }: { data: RecentPosting[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Recent Job Postings</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              Latest opportunities in the market
-            </p>
-          </div>
-          <Badge variant="secondary" className="text-xs">
-            Live
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-          {data.map((posting, idx) => (
-            <Link
-              key={idx}
-              href={`/roles`}
-              className="block p-3 rounded-lg border hover:border-primary hover:bg-accent transition-all group"
+    <div className="term-panel h-full flex flex-col">
+      {/* Panel header */}
+      <div className="term-panel-header">
+        <span className="term-panel-title">SYSTEM_LOGS: RECENT_JOB_POSTINGS.log</span>
+        <span
+          className="text-xs px-2 py-0.5 font-bold"
+          style={{
+            color: "var(--success)",
+            border: "1px solid color-mix(in srgb, var(--success) 40%, transparent 60%)",
+            borderRadius: "2px",
+            background: "color-mix(in srgb, var(--success) 8%, transparent 92%)",
+            fontFamily: "var(--font-geist-mono), monospace",
+            fontSize: "10px",
+            letterSpacing: "0.1em",
+          }}
+        >
+          LIVE
+        </span>
+      </div>
+
+      {/* Log entries */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-0">
+        {data.map((posting) => (
+          <Link
+            key={posting.job_id}
+            href="/roles"
+            className="block py-2.5 px-2 border-b transition-colors group"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div
+              className="group-hover:opacity-100"
+              style={{
+                fontFamily: "var(--font-geist-mono), monospace",
+                fontSize: "11px",
+                lineHeight: "1.6",
+              }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
-                    {truncateText(posting.title, 50)}
-                  </h4>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Building2 className="h-3 w-3" />
-                      {truncateText(posting.company_name, 25)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {truncateText(posting.location ?? "Remote", 20)}
-                    </span>
-                  </div>
-                  {posting.min_salary && posting.max_salary && (
-                    <div className="flex items-center gap-1 mt-2 text-xs font-medium text-green-600">
-                      <DollarSign className="h-3 w-3" />
-                      ${(posting.min_salary / 1000).toFixed(0)}k - ${(posting.max_salary / 1000).toFixed(0)}k
-                    </div>
-                  )}
+              {/* Timestamp + prefix */}
+              <div className="flex items-start gap-1.5 flex-wrap">
+                <span style={{ color: "var(--muted-foreground)" }}>
+                  {">>>"}{" "}
+                </span>
+                <span style={{ color: "var(--muted-foreground)", fontSize: "10px" }}>
+                  [{formatDate(posting.listed_time)}]
+                </span>
+                <span
+                  style={{ color: "var(--accent)", fontWeight: 700 }}
+                  className="group-hover:text-foreground transition-colors"
+                >
+                  New Posting:
+                </span>
+              </div>
+
+              {/* Job info */}
+              <div className="ml-5 mt-0.5 space-y-0.5">
+                <div className="text-foreground font-semibold group-hover:text-primary transition-colors">
+                  {truncate(posting.title, 52)}
                 </div>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                  <Clock className="h-3 w-3" />
-                  {formatTimeAgo(posting.listed_time)}
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  <span style={{ color: "var(--muted-foreground)" }}>
+                    @ {truncate(posting.company_name, 28)}
+                  </span>
+                  <span style={{ color: "var(--muted-foreground)" }}>
+                    [{posting.location ?? "REMOTE"}]
+                  </span>
+                  {posting.min_salary && posting.max_salary && (
+                    <span style={{ color: "var(--success)", fontWeight: 600 }}>
+                      ${Math.round(posting.min_salary / 1000)}k–${Math.round(posting.max_salary / 1000)}k
+                    </span>
+                  )}
+                  <span style={{ color: "var(--muted-foreground)", fontSize: "10px" }}>
+                    {formatTimeAgo(posting.listed_time)}
+                  </span>
                 </div>
               </div>
-            </Link>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }

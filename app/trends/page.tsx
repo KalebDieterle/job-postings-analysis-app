@@ -30,11 +30,10 @@ import { formatGrowthPercentage } from "@/lib/utils";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
-// Stat card component with glassmorphic style
+// Stat card — terminal style
 function StatCard({
   label,
   value,
-  icon: Icon,
   trend,
   trendUp,
   className,
@@ -47,20 +46,22 @@ function StatCard({
   className?: string;
 }) {
   return (
-    <div className={`glass-card p-5 space-y-3 ${className || ""}`}>
-      <div className="flex items-center justify-between">
-        <div className="h-10 w-10 rounded-lg glass-subtle flex items-center justify-center">
-          <Icon className="h-5 w-5 text-primary" />
-        </div>
+    <div className={`term-panel overflow-hidden ${className || ""}`}>
+      <div className="term-panel-header">
+        <span className="term-panel-title">{label}</span>
         {trend && (
-          <Badge className={trendUp ? "trend-badge-up" : "trend-badge-neutral"}>
+          <span className={trendUp ? "trend-badge-up" : "trend-badge-neutral"}>
             {trend}
-          </Badge>
+          </span>
         )}
       </div>
-      <div>
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
+      <div className="px-4 py-4">
+        <p
+          className="text-2xl font-bold tracking-tight"
+          style={{ color: "var(--primary)", fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          {value}
+        </p>
       </div>
     </div>
   );
@@ -159,7 +160,7 @@ async function TrendingContent({
       {/* Snapshot Comparison Info Banner */}
       <div className="glass-card p-4 border-l-4 border-blue-500">
         <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+          <Info className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
           <div className="space-y-1">
             <p className="font-semibold">Window Comparison</p>
             <p className="text-sm text-muted-foreground">

@@ -1,14 +1,5 @@
-﻿"use client";
+"use client";
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Briefcase,
-  DollarSign,
-  Building2,
-  Code,
-  type LucideIcon,
-} from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface HeroStatsProps {
@@ -23,21 +14,12 @@ interface HeroStatsProps {
   };
 }
 
-function AnimatedNumber({
-  value,
-  prefix = "",
-  suffix = "",
-}: {
-  value: number;
-  prefix?: string;
-  suffix?: string;
-}) {
+function AnimatedNumber({ value }: { value: number }) {
   const [count, setCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const duration = 2000;
-    const steps = 60;
+    const duration = 1800;
+    const steps = 50;
     const increment = value / steps;
     let current = 0;
 
@@ -45,7 +27,6 @@ function AnimatedNumber({
       current += increment;
       if (current >= value) {
         setCount(value);
-        setIsLoading(false);
         clearInterval(timer);
       } else {
         setCount(Math.floor(current));
@@ -55,56 +36,43 @@ function AnimatedNumber({
     return () => clearInterval(timer);
   }, [value]);
 
-  if (isLoading && count === 0) {
-    return <Skeleton className="h-10 w-28 bg-white/30" />;
-  }
-
-  return (
-    <span>
-      {prefix}
-      {count.toLocaleString()}
-      {suffix}
-    </span>
-  );
+  return <>{count.toLocaleString()}</>;
 }
 
-function StatCard({
-  icon: Icon,
-  title,
-  value,
-  change,
-  gradient,
-  prefix = "",
-  suffix = "",
-}: {
-  icon: LucideIcon;
-  title: string;
+interface MetricCardProps {
+  label: string;
   value: number;
-  change: string;
-  gradient: string;
   prefix?: string;
   suffix?: string;
-}) {
+  meta: string;
+  accent?: "orange" | "teal" | "green" | "warning";
+}
+
+function MetricCard({ label, value, prefix = "", suffix = "", meta, accent = "orange" }: MetricCardProps) {
+  const accentColor =
+    accent === "teal" ? "var(--accent)" :
+    accent === "green" ? "var(--success)" :
+    accent === "warning" ? "var(--warning)" :
+    "var(--primary)";
+
   return (
-    <Card className={`relative overflow-hidden border-none ${gradient}`}>
-      <CardContent className="p-4 md:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-white/80 md:text-sm">{title}</p>
-            <div className="text-3xl font-bold text-white md:text-4xl">
-              <AnimatedNumber value={value} prefix={prefix} suffix={suffix} />
-            </div>
-            <p className="flex items-center gap-1 text-xs text-white/70">
-              <span className="text-green-300">?</span>
-              {change}
-            </p>
-          </div>
-          <div className="rounded-full bg-white/20 p-3 md:p-4">
-            <Icon className="h-6 w-6 text-white md:h-8 md:w-8" />
-          </div>
+    <div className="term-panel overflow-hidden">
+      {/* Header bar */}
+      <div className="term-panel-header">
+        <span className="term-panel-title">{label}</span>
+      </div>
+
+      {/* Value */}
+      <div className="px-4 py-4 space-y-1">
+        <div
+          className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight"
+          style={{ color: accentColor, fontFamily: "var(--font-geist-mono), monospace" }}
+        >
+          {prefix}<AnimatedNumber value={value} />{suffix}
         </div>
-      </CardContent>
-    </Card>
+        <p className="text-xs text-muted-foreground">[{">"} {meta}]</p>
+      </div>
+    </div>
   );
 }
 
@@ -121,54 +89,41 @@ export function HeroStats({ data }: HeroStatsProps) {
   const salaryToDisplay = medianSalary ?? avgSalary;
 
   return (
-    <div className="mb-6 w-full rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 px-3 py-6 dark:from-slate-900 dark:to-slate-800 md:mb-8 md:px-4 md:py-10">
-      <div className="mx-auto">
-        <div className="mb-6 text-center md:mb-8">
-          <h2 className="mb-2 text-2xl font-bold md:text-3xl">Job Market Overview</h2>
-          <p className="text-muted-foreground">
-            Real-time insights from the latest job market data
-            {salarySampleSize
-              ? ` · Salary sample: ${salarySampleSize.toLocaleString()} postings`
-              : ""}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Quality-filtered annualized salary across all sources.
-          </p>
-        </div>
+    <div className="space-y-3">
+      {/* System log line */}
+      <p className="text-xs text-muted-foreground font-mono">
+        <span style={{ color: "var(--accent)" }}>{">>>"}</span>{" "}
+        SYSTEM_STATUS: LIVE_DATASET_CONNECTED
+        {salarySampleSize ? ` · SALARY_SAMPLE: ${salarySampleSize.toLocaleString()}_POSTINGS` : ""}
+      </p>
 
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-4">
-          <StatCard
-            icon={Briefcase}
-            title="Total Job Postings"
-            value={totalJobs}
-            change={`${monthlyGrowth > 0 ? "+" : ""}${monthlyGrowth}% this month`}
-            gradient="bg-gradient-to-br from-blue-500 to-blue-700"
-          />
-          <StatCard
-            icon={DollarSign}
-            title="Median Salary"
-            value={salaryToDisplay}
-            change="+5% vs last quarter"
-            gradient="bg-gradient-to-br from-green-500 to-green-700"
-            prefix="$"
-          />
-          <StatCard
-            icon={Building2}
-            title="Total Companies"
-            value={totalCompanies}
-            change="+8% this month"
-            gradient="bg-gradient-to-br from-purple-500 to-purple-700"
-          />
-          <StatCard
-            icon={Code}
-            title="Unique Skills"
-            value={totalSkills}
-            change="Growing demand"
-            gradient="bg-gradient-to-br from-orange-500 to-orange-700"
-          />
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MetricCard
+          label="TOTAL_POSTINGS"
+          value={totalJobs}
+          meta={`${monthlyGrowth > 0 ? "+" : ""}${monthlyGrowth}% MOM`}
+          accent="orange"
+        />
+        <MetricCard
+          label="MEDIAN_SALARY"
+          value={salaryToDisplay}
+          prefix="$"
+          meta="+5% VS LAST QTR"
+          accent="teal"
+        />
+        <MetricCard
+          label="TOTAL_COMPANIES"
+          value={totalCompanies}
+          meta="+8% THIS MONTH"
+          accent="green"
+        />
+        <MetricCard
+          label="UNIQUE_SKILLS"
+          value={totalSkills}
+          meta="GROWING DEMAND"
+          accent="warning"
+        />
       </div>
     </div>
   );
 }
-
