@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Homepage", () => {
   test("loads and shows hero stats", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/Job Analytics/i);
+    await expect(page).toHaveTitle(/SkillMap/i);
 
     // Hero stat cards should render with numbers > 0
     const statCards = page.locator("[data-testid='stat-card'], .stat-card, .text-2xl, .text-3xl");
