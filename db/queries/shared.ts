@@ -1516,9 +1516,9 @@ export async function getJobsByCityFiltered(params: {
     : 50;
   const offset = (safePage - 1) * safeLimit;
   const safeSort = sort === 'salary' || sort === 'name' ? sort : 'jobs';
-  const search = q.trim().toLowerCase();
+  const search = escapeLike(q.trim().toLowerCase());
   const stateFilter = state.trim().toLowerCase();
-  const countryFilter = country.trim().toLowerCase();
+  const countryFilter = escapeLike(country.trim().toLowerCase());
 
   const whereConditions: ReturnType<typeof sql>[] = [];
 

@@ -2,9 +2,11 @@ import { NextRequest } from "next/server";
 import { createHmac } from "crypto";
 
 // Secret used to HMAC-hash IPs so they cannot be reversed from logs.
-// Falls back to a build-time constant when IP_HASH_SECRET is not set;
-// set IP_HASH_SECRET in production for proper pseudonymisation.
-const IP_HASH_SECRET = process.env.IP_HASH_SECRET || "default-ip-hash-secret-set-IP_HASH_SECRET-in-prod";
+// Must be set via IP_HASH_SECRET environment variable in production.
+if (!process.env.IP_HASH_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("IP_HASH_SECRET must be set in production");
+}
+const IP_HASH_SECRET = process.env.IP_HASH_SECRET ?? "dev-ip-hash-secret";
 
 // Basic IPv4 / IPv6 sanity check — rejects obviously spoofed non-IP values.
 const VALID_IP_RE = /^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]+$/i;
