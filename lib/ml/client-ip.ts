@@ -3,10 +3,13 @@ import { createHmac } from "crypto";
 
 // Secret used to HMAC-hash IPs so they cannot be reversed from logs.
 // Must be set via IP_HASH_SECRET environment variable in production.
-if (!process.env.IP_HASH_SECRET && process.env.NODE_ENV === "production") {
-  throw new Error("IP_HASH_SECRET must be set in production");
+function getIpHashSecret(): string {
+  const secret = process.env.IP_HASH_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error("IP_HASH_SECRET must be set in production");
+  }
+  return secret ?? "dev-ip-hash-secret";
 }
-const IP_HASH_SECRET = process.env.IP_HASH_SECRET ?? "dev-ip-hash-secret";
 
 // Basic IPv4 / IPv6 sanity check — rejects obviously spoofed non-IP values.
 const VALID_IP_RE = /^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]+$/i;
@@ -54,6 +57,6 @@ export function getClientIp(request: NextRequest): string {
  * Prevents rainbow-table reversal of hashed IP addresses in logs.
  */
 export function hashIdentifier(value: string): string {
-  return createHmac("sha256", IP_HASH_SECRET).update(value).digest("hex").substring(0, 16);
+  return createHmac("sha256", getIpHashSecret()).update(value).digest("hex").substring(0, 16);
 }
 
