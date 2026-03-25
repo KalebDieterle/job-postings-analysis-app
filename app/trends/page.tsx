@@ -12,6 +12,7 @@ import { TrendsExportButton } from "@/components/ui/trending/trends-export-butto
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { slugify } from "@/lib/slugify";
 import {
   Flame,
   ArrowUpRight,
@@ -318,7 +319,7 @@ async function TrendingContent({
             {breakoutSkills.map((skill, index) => (
               <Link
                 key={skill.name}
-                href={`/skills/${encodeURIComponent(skill.name.toLowerCase())}`}
+                href={`/skills/${slugify(skill.name)}`}
                 className="block"
                 style={{
                   animationDelay: `${index * 50}ms`,
@@ -359,7 +360,7 @@ async function TrendingContent({
             {regularTrending.map((skill, index) => (
               <Link
                 key={skill.name}
-                href={`/skills/${encodeURIComponent(skill.name.toLowerCase())}`}
+                href={`/skills/${slugify(skill.name)}`}
                 className="block"
                 style={{
                   animationDelay: `${(breakoutSkills.length + index) * 50}ms`,
@@ -465,4 +466,3 @@ export default async function TrendsPage({
     </MobilePageShell>
   );
 }
-

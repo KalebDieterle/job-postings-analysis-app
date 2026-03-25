@@ -15,6 +15,7 @@ import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import { formatGrowthPercentage } from "@/lib/utils";
 import { formatCompactNumber, truncateAxisLabel } from "@/lib/chart-formatters";
+import { slugify } from "@/lib/slugify";
 
 interface TrendingSkill {
   skill_name: string;
@@ -229,7 +230,7 @@ export function EnhancedTrendingSkills({
           {data.slice(0, 5).map((skill, idx) => (
             <Link
               key={idx}
-              href={`/skills/${skill.skill_name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+              href={`/skills/${slugify(skill.skill_name)}`}
               className="p-2 rounded-lg border hover:border-primary hover:bg-accent transition-all text-center group"
             >
               <p className="text-xs font-medium truncate group-hover:text-primary">
@@ -247,4 +248,3 @@ export function EnhancedTrendingSkills({
     </Card>
   );
 }
-

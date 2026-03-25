@@ -162,6 +162,11 @@ export default async function CompanySlugPage({ params }: PageProps) {
       )
     : null;
 
+  // remote_allowed is stored as strings like '1', '1.0', 'true', 't', or 'false'.
+  // The string 'false' is truthy in JS, so a simple boolean coercion is wrong.
+  const isRemoteJob = (v: unknown) =>
+    ["1", "1.0", "true", "t"].includes(String(v ?? "").toLowerCase());
+
   return (
     <MobilePageShell className="pb-8">
       <section className="relative flex min-h-48 items-end overflow-hidden rounded-xl p-5 glass-card md:min-h-55 md:p-8">
@@ -538,12 +543,12 @@ export default async function CompanySlugPage({ params }: PageProps) {
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <span
                   className={`rounded-full px-2 py-0.5 font-semibold ${
-                    job.remote_allowed
+                    isRemoteJob(job.remote_allowed)
                       ? "bg-emerald-500/10 text-emerald-400"
                       : "bg-primary/10 text-primary"
                   }`}
                 >
-                  {job.remote_allowed ? "Remote" : "On-site"}
+                  {isRemoteJob(job.remote_allowed) ? "Remote" : "On-site"}
                 </span>
                 <span className="text-slate-300">
                   {job.min_salary
@@ -607,10 +612,10 @@ export default async function CompanySlugPage({ params }: PageProps) {
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex items-center gap-2 text-xs font-semibold ${
-                          job.remote_allowed ? "text-emerald-400" : "text-amber-400"
+                          isRemoteJob(job.remote_allowed) ? "text-emerald-400" : "text-amber-400"
                         }`}
                       >
-                        {job.remote_allowed ? "Remote" : "Active"}
+                        {isRemoteJob(job.remote_allowed) ? "Remote" : "Active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">

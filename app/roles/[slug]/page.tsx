@@ -26,6 +26,7 @@ import {
   getTopCompaniesForRole,
   getRoleStats,
   getRoleGrowth,
+  resolveCanonicalRoleSlug,
 } from "@/db/queries";
 import { RoleSalaryPreview } from "@/components/ui/intelligence/role-salary-preview";
 import { SkillGapRadar } from "@/components/ui/roles/skill-gap-radar";
@@ -40,10 +41,11 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const slugStr = Array.isArray(slug) ? slug.join("-") : (slug ?? "");
-  const title = slugStr
+  const fallbackTitle = slugStr
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+  const title = (await resolveCanonicalRoleSlug(slugStr)) ?? fallbackTitle;
 
   const [stats, skills] = await Promise.all([
     getRoleStats(title),
@@ -72,11 +74,11 @@ export default async function RoleDetailPage({ params }: PageProps) {
 
   if (!slugStr) notFound();
 
-  // Convert slug to a readable Title (e.g., "software-engineer" -> "Software Engineer")
-  const title = slugStr
+  const fallbackTitle = slugStr
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+  const title = (await resolveCanonicalRoleSlug(slugStr)) ?? fallbackTitle;
 
   // Parallel Fetching
   const [jobs, skills, companies, stats, growth] = await Promise.all([

@@ -4,6 +4,7 @@ export {
   getSkillDetails,
   getRelatedSkills,
   getSkillTrendingData,
+  resolveCanonicalSkillSlug,
   getSkillsWithFilters,
   getTrendingSkillsData,
   getHighPayingSkills,

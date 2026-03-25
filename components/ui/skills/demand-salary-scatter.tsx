@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { useRouter } from "next/navigation";
 import { formatCompactNumber, formatCurrencyCompact } from "@/lib/chart-formatters";
+import { slugify } from "@/lib/slugify";
 
 interface SkillDataPoint {
   name: string;
@@ -58,7 +59,7 @@ export function DemandSalaryScatter({ data }: DemandSalaryScatterProps) {
 
   const handleClick = (data: any) => {
     if (data && data.name) {
-      router.push(`/skills/${encodeURIComponent(data.name.toLowerCase())}`);
+      router.push(`/skills/${slugify(data.name)}`);
     }
   };
 

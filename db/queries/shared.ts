@@ -16,6 +16,19 @@ import { buildAnchoredTimeframeWindow, normalizeTimeframeDays } from '../../lib/
 const canonicalRole = (titleCol: any) =>
   sql`coalesce(lower(${roleAliases.canonical_name}), lower(${titleCol}))`;
 
+const slugifySql = (column: any) => sql`
+  lower(
+    trim(
+      both '-' from regexp_replace(
+        regexp_replace(trim(coalesce(${column}::text, '')), '[^a-zA-Z0-9\\s_-]+', '', 'g'),
+        '[\\s_-]+',
+        '-',
+        'g'
+      )
+    )
+  )
+`;
+
 const VALID_ANNUAL_SALARY_MIN = 20_000;
 const VALID_ANNUAL_SALARY_MAX = 500_000;
 type TrendComparisonMode = 'contiguous' | 'fallback' | 'none';
@@ -128,6 +141,87 @@ async function getComparisonDateRange(days: number = 30): Promise<TrendCompariso
     previousEndDate: fallbackWindow.endDate,
     comparisonMode: 'fallback',
   };
+}
+
+export async function resolveCanonicalRoleSlug(roleSlug: string) {
+  const normalizedSlug = roleSlug.trim().toLowerCase();
+
+  if (!normalizedSlug) {
+    return null;
+  }
+
+  const exactTitleMatch = await db.execute<{ canonical_name: string }>(sql`
+    SELECT
+      p.title AS canonical_name,
+      COUNT(*)::int AS posting_count
+    FROM ${postings} p
+    WHERE ${slugifySql(sql`p.title`)} = ${normalizedSlug}
+    GROUP BY p.title
+    ORDER BY posting_count DESC, canonical_name ASC
+    LIMIT 1
+  `);
+
+  if (exactTitleMatch.rows[0]?.canonical_name) {
+    return exactTitleMatch.rows[0].canonical_name;
+  }
+
+  const aliasMatch = await db.execute<{ canonical_name: string }>(sql`
+    SELECT ${roleAliases.canonical_name} AS canonical_name
+    FROM ${roleAliases}
+    WHERE ${slugifySql(roleAliases.canonical_name)} = ${normalizedSlug}
+       OR ${slugifySql(roleAliases.alias)} = ${normalizedSlug}
+    ORDER BY
+      CASE
+        WHEN ${slugifySql(roleAliases.canonical_name)} = ${normalizedSlug} THEN 0
+        ELSE 1
+      END,
+      COALESCE(${roleAliases.job_count}, 0) DESC,
+      ${roleAliases.canonical_name} ASC
+    LIMIT 1
+  `);
+
+  if (aliasMatch.rows[0]?.canonical_name) {
+    return aliasMatch.rows[0].canonical_name;
+  }
+
+  const postingMatch = await db.execute<{ canonical_name: string }>(sql`
+    SELECT
+      COALESCE(ra.canonical_name, p.title) AS canonical_name,
+      COUNT(*)::int AS posting_count
+    FROM ${postings} p
+    LEFT JOIN ${roleAliases} ra ON LOWER(p.title) = LOWER(ra.alias)
+    WHERE ${slugifySql(sql`COALESCE(ra.canonical_name, p.title)`)} = ${normalizedSlug}
+       OR ${slugifySql(sql`p.title`)} = ${normalizedSlug}
+    GROUP BY COALESCE(ra.canonical_name, p.title)
+    ORDER BY posting_count DESC, canonical_name ASC
+    LIMIT 1
+  `);
+
+  return postingMatch.rows[0]?.canonical_name ?? null;
+}
+
+export async function resolveCanonicalSkillSlug(skillSlug: string) {
+  const normalizedSlug = skillSlug.trim().toLowerCase();
+
+  if (!normalizedSlug) {
+    return null;
+  }
+
+  const result = await db.execute<{ skill_name: string }>(sql`
+    SELECT ${skills.skill_name} AS skill_name
+    FROM ${skills}
+    WHERE LOWER(${skills.skill_name}) = ${normalizedSlug}
+       OR ${slugifySql(skills.skill_name)} = ${normalizedSlug}
+    ORDER BY
+      CASE
+        WHEN LOWER(${skills.skill_name}) = ${normalizedSlug} THEN 0
+        ELSE 1
+      END,
+      ${skills.skill_name} ASC
+    LIMIT 1
+  `);
+
+  return result.rows[0]?.skill_name ?? null;
 }
 
 // ===========================
@@ -587,17 +681,18 @@ export async function getTopSkillsForRole(roleTitle: string, limit = 10) {
 // ===========================
 export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
   const roleLower = roleTitle.toLowerCase();
+  // Group by company_name only (no companies join) so that duplicate companies table
+  // entries with the same name but different country values don't fan out postings
+  // into multiple groups and produce duplicate rows in the top-10 list.
   return await db
     .select({
       company_name: postings.company_name,
       count: count(),
-      country: companies.country,
     })
     .from(postings)
     .leftJoin(roleAliases, sql`lower(postings.title) = lower(${roleAliases.alias})`)
-    .leftJoin(companies, sql`lower(postings.company_name) = lower(${companies.name})`)
     .where(sql`coalesce(lower(${roleAliases.canonical_name}), lower(postings.title)) = ${roleLower}`)
-    .groupBy(postings.company_name, companies.country)
+    .groupBy(postings.company_name)
     .orderBy(desc(count()))
     .limit(limit);
 }
@@ -839,27 +934,36 @@ export async function getRoleInsights(roleTitle: string) {
 }
 
 export async function getRoleGrowth(title: string) {
-  const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const roleLower = title.toLowerCase();
+  const comparison = await getComparisonDateRange(30);
+
+  if (comparison.comparisonMode !== 'contiguous') {
+    return 0;
+  }
 
   const [currentPeriod, previousPeriod] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` })
+    db.select({ count: sql<number>`count(*)::int` })
       .from(postings)
-      .where(and(eq(postings.title, title), gte(postings.listed_time, thirtyDaysAgo))),
-    db.select({ count: sql<number>`count(*)` })
-      .from(postings)
+      .leftJoin(roleAliases, sql`lower(${postings.title}) = lower(${roleAliases.alias})`)
       .where(and(
-        eq(postings.title, title), 
-        gte(postings.listed_time, sixtyDaysAgo), 
-        lt(postings.listed_time, thirtyDaysAgo)
+        sql`${canonicalRole(postings.title)} = ${roleLower}`,
+        gte(postings.listed_time, comparison.startDate),
+        lt(postings.listed_time, comparison.endDate),
+      )),
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(postings)
+      .leftJoin(roleAliases, sql`lower(${postings.title}) = lower(${roleAliases.alias})`)
+      .where(and(
+        sql`${canonicalRole(postings.title)} = ${roleLower}`,
+        gte(postings.listed_time, comparison.previousStartDate),
+        lt(postings.listed_time, comparison.previousEndDate),
       )),
   ]);
 
-  const current = currentPeriod[0].count || 0;
-  const previous = previousPeriod[0].count || 0;
+  const current = Number(currentPeriod[0]?.count ?? 0);
+  const previous = Number(previousPeriod[0]?.count ?? 0);
 
-  if (previous === 0) return current > 0 ? 100 : 0;
+  if (previous < 10) return 0;
   return Math.round(((current - previous) / previous) * 100);
 }
 
@@ -997,12 +1101,13 @@ export async function getAllCompanyData({
   }
   havingConditions.push(...sizeConditions);
 
-  // Use a single query with all joins to support aggregate-based features
+  // Group by name only so that duplicate companies table entries (same company name,
+  // different company_id) are collapsed into a single row in the listing.
   const baseQuery = db
     .select({
-      company_id: companies.company_id,
+      company_id: sql<string>`MIN(${companies.company_id})`,
       name: companies.name,
-      country: companies.country,
+      country: sql<string>`MAX(${companies.country})`,
       company_size: sql<number>`MAX(${employee_counts.employee_count})`,
       postings_count: sql<number>`COUNT(DISTINCT ${postings.job_id})::int`,
       median_salary: sql<number>`COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${salaryCaseExpr}), 0)::int`,
@@ -1012,7 +1117,7 @@ export async function getAllCompanyData({
     .leftJoin(postings, eq(companies.name, postings.company_name))
     .leftJoin(employee_counts, eq(companies.company_id, employee_counts.company_id))
     .where(and(...conditions))
-    .groupBy(companies.company_id, companies.name, companies.country);
+    .groupBy(companies.name);
 
   // Apply HAVING if any aggregate filters
   const queryWithHaving = havingConditions.length > 0
@@ -1749,12 +1854,26 @@ export async function getJobsByCountry() {
  * Get detailed stats for a specific location
  */
 export async function getLocationStats(locationSlug: string) {
+  // Parse city/state directly from postings.location (e.g. "New York, NY") rather than
+  // joining the companies table. The companies join caused the wrong city to appear because
+  // one job location could match hundreds of companies with different registered cities.
+  const cityExpr = sql<string>`CASE
+    WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN TRIM(SPLIT_PART(${postings.location}, ',', 1))
+    WHEN ${postings.location} ~ '^[^,]+, [^,]+$'    THEN TRIM(SPLIT_PART(${postings.location}, ',', 1))
+    ELSE ${postings.location}
+  END`;
+  const stateExpr = sql<string>`CASE
+    WHEN ${postings.location} ~ '^[^,]+, [A-Z]{2}$' THEN TRIM(SPLIT_PART(${postings.location}, ',', 2))
+    WHEN ${postings.location} ~ '^[^,]+, [^,]+$'    THEN TRIM(SPLIT_PART(${postings.location}, ',', 2))
+    ELSE NULL
+  END`;
+
   const result = await db
     .select({
       location: postings.location,
-      city: companies.city,
-      state: companies.state,
-      country: companies.country,
+      city: cityExpr,
+      state: stateExpr,
+      country: postings.country,
       totalJobs: sql<number>`count(distinct ${postings.job_id})`.as("total_jobs"),
       totalCompanies: sql<number>`count(distinct ${postings.company_id})`.as("total_companies"),
       medianMinSalary: sql<number>`percentile_cont(0.5) within group (
@@ -1790,11 +1909,10 @@ export async function getLocationStats(locationSlug: string) {
       totalApplies: sql<number>`sum(CAST(round(CAST(COALESCE(NULLIF(${postings.applies}, ''), '0') AS numeric)) AS bigint))`.as("total_applies"),
     })
     .from(postings)
-    .leftJoin(companies, sql`LOWER(TRIM(${companies.name})) = LOWER(TRIM(${postings.company_name}))`)
     .where(
       sql`lower(regexp_replace(${postings.location}, '[^a-zA-Z0-9]+', '-', 'g')) = lower(regexp_replace(${locationSlug}, '[^a-zA-Z0-9]+', '-', 'g'))`
     )
-    .groupBy(postings.location, companies.city, companies.state, companies.country);
+    .groupBy(postings.location, postings.country);
 
   return result[0] || null;
 }

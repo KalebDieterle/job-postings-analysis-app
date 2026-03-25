@@ -31,6 +31,7 @@ import { skillsSearchParamsCache } from "@/lib/skills-search-params";
 import { MobilePageHeader } from "@/components/ui/mobile/mobile-page-header";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 import { MobileStickyActions } from "@/components/ui/mobile/mobile-sticky-actions";
+import { slugify } from "@/lib/slugify";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -150,7 +151,7 @@ async function SkillsContent({ searchParams }: { searchParams: SearchParams }) {
               {skillsData.map((skill) => (
                 <Link
                   key={skill.name}
-                  href={`/skills/${encodeURIComponent(skill.name.toLowerCase())}`}
+                  href={`/skills/${slugify(skill.name)}`}
                   className="transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <SkillCard

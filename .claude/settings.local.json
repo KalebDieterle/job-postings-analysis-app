@@ -14,12 +14,10 @@
       "Bash(ls -la /home/kalebd/Documents/coding/job-postings-analysis-app/*.json /home/kalebd/Documents/coding/job-postings-analysis-app/*.yml /home/kalebd/Documents/coding/job-postings-analysis-app/*.toml)",
       "Bash(wc -l /home/kalebd/Documents/coding/job-postings-analysis-app/db/queries/*.ts)",
       "Bash(wc -l /home/kalebd/Documents/coding/job-postings-analysis-app/app/**/*.tsx /home/kalebd/Documents/coding/job-postings-analysis-app/app/**/*.ts)",
-      "mcp__next-devtools__init",
-      "mcp__next-devtools__nextjs_call",
-      "mcp__next-devtools__nextjs_index",
-      "mcp__next-devtools__browser_eval",
-      "mcp__neon__get_connection_string",
-      "Bash(find /c/Users/kaleb/Documents/coding/job-postings-analysis-app -maxdepth 2 \\\\\\(-name *.tokens.* -o -name *theme* -o -name *design-system* \\\\\\) -type f)"
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Read(//home/kalebd/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if ''''mcp'''' in k.lower\\(\\) or ''''project'''' in k.lower\\(\\)}, indent=2\\)\\)\")"
     ]
   }
 }

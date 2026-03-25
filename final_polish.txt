@@ -1,3 +1,10 @@
+PRODUCTION AUDIT — job-postings-analysis-app.vercel.app
+Date: 2026-03-25
+==================================================================================
+
+============================================================
+PREVIOUSLY NOTED
+============================================================
 - Fix random inaccurate percentages, such as "Total Job Postings
 156,126
 
@@ -10,5 +17,195 @@ It is marked as this on production/vercel:
 ?+54390% this month
 "
 
-- Polish UI to make it look less generic and ai generated.
-- 
+Current production now shows +121% — reduced but still needs verification
+against actual DB delta (may still be inflated depending on baseline period).
+
+============================================================
+HOMEPAGE (/)
+============================================================
+1. [STAT] "Unique Skills: 35" — only 35 skills tracked across 156K postings
+   is implausibly low. The skills table has far more entries. This is almost
+   certainly a COUNT query bug that counts something other than distinct
+   skill names.
+
+2. [STAT] Total Postings: 156,126 (+121% this month) — the growth percentage
+   may still be inflated. Verify the baseline month used for comparison.
+
+3. [DATA] "Latest Postings" section is dominated entirely by hospice/nursing
+   roles — likely not representative. Consider diversifying the recency
+   query to show across job categories.
+
+============================================================
+SKILLS PAGE (/skills)
+============================================================
+4. [UI BUG] Filter tag reads "Trending Now47" — no space between the label
+   and the count number. Should be "Trending Now (47)" or "Trending Now · 47".
+
+5. [STAT] "Total Skills Tracked: 35" with "34 skills added this month" —
+   if 34 of 35 total skills were added this month, the prior state had 1
+   skill. This is nonsensical and points to the same COUNT bug as #1.
+
+6. [DATA] "Advertising" shows 267.8% growth (fastest growing) but does not
+   appear anywhere in the top 24 skills grid. If it is a top grower, it
+   should surface in the list.
+
+7. [STAT] The skill categories (Soft Skills 39.2%, Tools & Platforms 27.6%,
+   DevOps & Cloud 18.3%, Databases & Data 12%, AI/ML 2.9%) are shown but
+   the underlying "35 total skills" count makes these category breakdowns
+   unreliable.
+
+============================================================
+COMPANIES PAGE (/companies)
+============================================================
+8. [DATA BUG] Duplicate company entries — Oracle, Jobot, Walgreens, Boeing,
+   Deloitte, Google, Humana, Aerotek, Amazon, Coinbase, Guidehouse, CVS
+   Health, Walmart, Jobgether, Northrop Grumman, General Motors, Uber,
+   Leidos, and Intermountain Health each appear TWICE with identical
+   statistics in the listing. This is a query/deduplication bug.
+
+============================================================
+LOCATION DETAIL PAGES (/locations/[slug]) — CRITICAL
+============================================================
+9. [CRITICAL BUG] ALL tested location detail pages display the WRONG city
+   in the page header vs. the data. Examples:
+   - /locations/new-york-ny       → page header says "Aberdeen, MD, US"
+   - /locations/san-francisco-ca  → page header says "Adairsville, GA, US"
+   - /locations/atlanta-fulton-county → page header says "Akron, OH, US"
+                                        (though stats section says Atlanta)
+
+   The slug resolves correctly to the right data in some places but the
+   hero/header component renders a different location — likely the first
+   result from a separate alphabetically-sorted query that doesn't filter
+   by slug. This is a severe data mismatch affecting every location page.
+
+============================================================
+LOCATIONS LISTING PAGE (/locations)
+============================================================
+10. [STAT] Average salary displayed as "-67.81% below market average" for the
+    global summary — this looks like a comparison against itself or a bad
+    baseline. An average salary cannot be 67% below its own market average
+    unless the baseline is wrong.
+
+11. [DATA] Page claims "worldwide" coverage but "Countries: 1" (US only).
+    The framing should not say global/worldwide if only US data exists.
+
+12. [DATA] Multiple cities appear with duplicate entries (e.g., three separate
+    Los Angeles entries with varying salaries and job counts), suggesting
+    the locations table is not properly deduplicated.
+
+============================================================
+ROLE DETAIL PAGES (/roles/[slug])
+============================================================
+13. [DATA BUG] Duplicate companies in Top Companies list:
+    - /roles/software-engineer: Humana appears twice (positions 9 & 10,
+      both with 99 postings)
+    - /roles/account-executive: Zoom appears twice (positions 4 & 5,
+      both with 66 postings)
+    This is a grouping/deduplication bug in the top-companies query for
+    role detail pages.
+
+14. [STAT] Many roles show implausibly high month-over-month growth:
+    - Data Scientist: +229% this month
+    - Registered Nurse: +180% this month
+    - Account Executive: +90% this month
+    - Software Engineer: +64% this month
+    These are consistent with the general percentage inflation bug (#1 above).
+
+15. [UI] Role detail page description says "strengthening across 10 tracked
+    companies" but the list actually shows more than 10. The hardcoded "10"
+    in the copy doesn't match the actual rendered count.
+
+16. [ROUTE] /roles/frontend-developer returns 404 — this is a top-tier role
+    name that should exist. Either the slug doesn't match the DB canonical
+    name, or the role alias is missing.
+
+============================================================
+COMPANY DETAIL PAGES (/companies/[slug])
+============================================================
+17. [DATA BUG] Jobot (/companies/jobot): "Remote-friendly roles: 0%" is shown
+    while every single job listing on the same page is tagged "Remote". This
+    is a direct contradiction — the remote % stat is not being computed from
+    the same data shown in the listings.
+
+18. [UI] Oracle salary shown as "$153,666.315" (3 decimal places) — should
+    be formatted to 2 decimal places maximum, or rounded to nearest dollar
+    for display.
+
+============================================================
+SKILLS DETAIL PAGES (/skills/[slug])
+============================================================
+19. [ROUTE] /skills/python returns 404. "Python" is one of the most in-demand
+    tech skills globally. Either the skill is stored under a different name
+    in the DB (e.g., "Python Development") or the slug is not matching.
+    Check the skills table for the canonical name and add a role_alias or
+    slug redirect.
+
+============================================================
+ADMIN / BACKEND DASHBOARD (/admin)
+============================================================
+20. [OPERATIONAL] Monthly Adzuna API quota: 2,547 / 2,500 (CRITICAL — 47
+    over limit). No new imports can run until the monthly window resets.
+
+21. [STAT] Admin confirms "Total Skills: 35" — this validates bug #1/#5 above
+    and means the skills table genuinely only has 35 rows. The dashboard is
+    accurately reflecting the DB state, but 35 skills for 156K postings is
+    extremely limited and probably means skills are very broadly categorized
+    (e.g., "Information Technology", "Management") rather than specific
+    skills (e.g., "Python", "React", "AWS").
+
+============================================================
+SALARY PREDICTOR (/intelligence/salary-predictor)
+============================================================
+22. [UX] Skill vocabulary shows "Loading skill vocabulary..." on page load
+    and may never populate if the ML service is slow to respond. Add a
+    fallback / timeout message so users aren't stuck watching a spinner.
+
+============================================================
+TRENDS PAGE (/trends)
+============================================================
+23. [DATA] "Zero new skill entries in the 7-day window" — if no skills were
+    added in the last week, trending data is comparing against a frozen
+    baseline. This may be correct but should be surfaced to the user clearly
+    rather than silently showing growth percentages with no new data.
+
+============================================================
+GENERAL / CROSS-CUTTING
+============================================================
+24. [DATA] Top-paying role listed across multiple pages: "Therapist-Resp (RRT)
+    - P9400" at $492k–$498k median. This is almost certainly a data outlier
+    or a mis-categorized posting (RRT = Respiratory Therapist; median RRT
+    salary is ~$65k nationally). This outlier is skewing salary stats and
+    should be investigated / filtered.
+
+25. [DATA] "Pharmacy/Technician" listed as lowest paying at $24k — the slash
+    in the role name suggests a data normalization issue in the role titles
+    at import time.
+
+==================================================================================
+SUMMARY — PRIORITY ORDER
+==================================================================================
+P0 (Critical):
+  - #9  Location detail pages show wrong city (header/data mismatch)
+  - #8  Duplicate companies in listing
+  - #13 Duplicate companies in role detail top-lists
+  - #17 Remote % stat contradicts job listing tags on company pages
+
+P1 (High):
+  - #1/#5/#21 "35 skills" count — skills table is too sparse / category-level
+  - #14 Inflated month-over-month growth percentages across roles
+  - #19 /skills/python 404 (and likely other tech-specific skills)
+  - #16 /roles/frontend-developer 404
+
+P2 (Medium):
+  - #4  "Trending Now47" UI text concatenation
+  - #10 -67.81% below market average displayed on locations listing
+  - #15 Hardcoded "10 tracked companies" copy mismatch
+  - #18 Excessive decimal places on salary display
+  - #22 Salary predictor skill vocabulary loading UX
+  - #24 $492k outlier for Respiratory Therapist skewing salary stats
+
+P3 (Low/Polish):
+  - #3  Latest postings dominated by hospice roles
+  - #11 "Worldwide" framing with US-only data
+  - #23 No new skill entries note on trends page
+  - #25 "Pharmacy/Technician" slash in role name

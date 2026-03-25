@@ -8,6 +8,7 @@ export {
   getRoleDataQuality,
   getRoleInsights,
   getRoleGrowth,
+  resolveCanonicalRoleSlug,
   getAverageSalary,
   getMedianSalary,
   getTopLocation,

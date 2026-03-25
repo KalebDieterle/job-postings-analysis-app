@@ -51,7 +51,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     skillRoutes = (skills as { name: string }[])
       .filter((s) => s.name)
       .map((s) => ({
-        url: `${BASE_URL}/skills/${encodeURIComponent(s.name.toLowerCase())}`,
+        url: `${BASE_URL}/skills/${slugify(s.name)}`,
         lastModified: now,
         changeFrequency: "weekly" as const,
         priority: 0.6,

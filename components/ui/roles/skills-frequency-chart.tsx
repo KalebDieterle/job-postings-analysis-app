@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { slugify } from "@/lib/slugify";
 
 interface SkillData {
   skill_name: string;
@@ -54,7 +55,7 @@ export function SkillsFrequencyChart({ data }: SkillsFrequencyChartProps) {
           {data.map((skill) => (
             <Link
               key={skill.skill_abr}
-              href={`/skills/${encodeURIComponent(skill.skill_name.toLowerCase())}`}
+              href={`/skills/${slugify(skill.skill_name)}`}
               className="group"
             >
               <div

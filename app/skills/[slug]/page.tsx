@@ -2,7 +2,11 @@
 export const revalidate = 1800;
 
 import type { Metadata } from "next";
-import { getSkillDetails, getSkillTrendingData } from "@/db/queries";
+import {
+  getSkillDetails,
+  getSkillTrendingData,
+  resolveCanonicalSkillSlug,
+} from "@/db/queries";
 import { SkillTimelineChart } from "@/components/ui/charts/skill-timeline-chart";
 import { StatCard } from "@/components/ui/stat-card";
 import { Briefcase, DollarSign, BarChart3, ChevronLeft } from "lucide-react";
@@ -23,7 +27,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const name = decodeURIComponent(slug);
+  const decodedSlug = decodeURIComponent(slug);
+  const name = (await resolveCanonicalSkillSlug(decodedSlug)) ?? decodedSlug;
   const details = await getSkillDetails(name);
   const salary =
     details.medianSalary ?? details.avgSalary
@@ -47,11 +52,12 @@ export default async function SkillDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const resolvedParams = await params;
-  const decodedName = decodeURIComponent(resolvedParams.slug);
+  const decodedSlug = decodeURIComponent(resolvedParams.slug);
+  const skillName = (await resolveCanonicalSkillSlug(decodedSlug)) ?? decodedSlug;
 
   const [details, trendingData] = await Promise.all([
-    getSkillDetails(decodedName),
-    getSkillTrendingData(decodedName),
+    getSkillDetails(skillName),
+    getSkillTrendingData(skillName),
   ]);
 
   if (details.count === 0 && trendingData.length === 0) {
@@ -74,10 +80,10 @@ export default async function SkillDetailPage({
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-2xl font-extrabold tracking-tight capitalize md:text-4xl lg:text-5xl">
-          {decodedName}
+          {skillName}
         </h1>
         <p className="text-sm text-muted-foreground md:text-lg">
-          Detailed market analysis for {decodedName}
+          Detailed market analysis for {skillName}
         </p>
       </div>
 

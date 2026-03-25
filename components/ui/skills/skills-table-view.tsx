@@ -22,6 +22,7 @@ import {
 import Link from "next/link";
 import { categorizeSkill } from "@/lib/skill-helpers";
 import { cn } from "@/lib/utils";
+import { slugify } from "@/lib/slugify";
 
 interface SkillTableData {
   name: string;
@@ -260,7 +261,7 @@ export function SkillsTableView({ data }: SkillsTableViewProps) {
                   </TableCell>
                   <TableCell className="font-medium">
                     <Link
-                      href={`/skills/${encodeURIComponent(skill.name.toLowerCase())}`}
+                      href={`/skills/${slugify(skill.name)}`}
                       className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
                     >
                       {skill.name}
