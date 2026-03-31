@@ -4,8 +4,8 @@ test.describe("Salary Predictor", () => {
   test("page loads with form", async ({ page }) => {
     await page.goto("/intelligence/salary-predictor");
     await expect(page.locator("h1").filter({ hasText: /salary/i }).first()).toBeVisible({ timeout: 15_000 });
-    // Form should be present
-    await expect(page.locator("form, [role='form'], input, select, button").first()).toBeVisible();
+    // Form should be present — scope to main content to avoid the md:hidden mobile nav toggle
+    await expect(page.locator("main input, main select, main button:visible").first()).toBeVisible();
   });
 
   test("form submission shows a result or error gracefully", async ({ page }) => {
