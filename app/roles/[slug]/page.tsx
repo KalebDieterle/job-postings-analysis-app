@@ -27,8 +27,10 @@ import {
   getRoleStats,
   getRoleGrowth,
   resolveCanonicalRoleSlug,
+  getRelatedRoles,
 } from "@/db/queries";
 import { RoleSalaryPreview } from "@/components/ui/intelligence/role-salary-preview";
+import { RelatedRolesSection } from "@/components/ui/roles/related-roles-section";
 import { SkillGapRadar } from "@/components/ui/roles/skill-gap-radar";
 import { MobilePageShell } from "@/components/ui/mobile/mobile-page-shell";
 
@@ -81,12 +83,13 @@ export default async function RoleDetailPage({ params }: PageProps) {
   const title = (await resolveCanonicalRoleSlug(slugStr)) ?? fallbackTitle;
 
   // Parallel Fetching
-  const [jobs, skills, companies, stats, growth] = await Promise.all([
+  const [jobs, skills, companies, stats, growth, relatedRoles] = await Promise.all([
     getJobsByRole(title, 50),
     getTopSkillsForRole(title, 10),
     getTopCompaniesForRole(title, 10),
     getRoleStats(title),
     getRoleGrowth(title),
+    getRelatedRoles(title, 5),
   ]);
 
   if (jobs.length === 0) {
@@ -253,6 +256,7 @@ export default async function RoleDetailPage({ params }: PageProps) {
         </div>
 
         {/* 4. Content Layout: Charts and Lists */}
+        {/* 4. Content Layout: Charts and Lists */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Skill Visualization */}
           <div className="lg:col-span-2">
@@ -292,6 +296,9 @@ export default async function RoleDetailPage({ params }: PageProps) {
             </div>
           </div>
         </div>
+
+        {/* 5. Related Roles */}
+        <RelatedRolesSection roles={relatedRoles} />
       </div>
     </MobilePageShell>
   );
