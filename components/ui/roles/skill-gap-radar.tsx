@@ -38,22 +38,22 @@ export function SkillGapRadar({ data, roleTitle }: SkillGapRadarProps) {
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={radarData} margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
-              <PolarGrid stroke="hsl(var(--border))" />
+              <PolarGrid stroke="#2a4a38" />
               <PolarAngleAxis
                 dataKey="skill"
-                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fontSize: 11, fill: "#8ab5a0" }}
               />
               <PolarRadiusAxis
                 angle={30}
                 domain={[0, 100]}
-                tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fontSize: 9, fill: "#6b9a87" }}
               />
               <Radar
                 name="Demand"
                 dataKey="demand"
-                stroke="hsl(var(--primary))"
-                fill="hsl(var(--primary))"
-                fillOpacity={0.25}
+                stroke="#d96030"
+                fill="#d96030"
+                fillOpacity={0.3}
                 strokeWidth={2}
               />
               <Tooltip
@@ -62,10 +62,11 @@ export function SkillGapRadar({ data, roleTitle }: SkillGapRadarProps) {
                   props.payload?.fullSkill ?? "Skill",
                 ]}
                 contentStyle={{
-                  background: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
+                  background: "#0f2219",
+                  border: "1px solid #2a4a38",
+                  borderRadius: "4px",
                   fontSize: "12px",
+                  color: "#c8ddd6",
                 }}
               />
             </RadarChart>
