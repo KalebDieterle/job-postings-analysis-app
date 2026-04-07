@@ -18,4 +18,5 @@ export {
   getPostingTimeline,
   getExperienceDistribution,
   getRolesSalaryBenchmark,
+  getRelatedRoles,
 } from "./shared";

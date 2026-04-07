@@ -698,6 +698,55 @@ export async function getTopCompaniesForRole(roleTitle: string, limit = 10) {
 }
 
 // ===========================
+// Related roles by skill overlap
+// ===========================
+export async function getRelatedRoles(roleTitle: string, limit = 5) {
+  const roleLower = roleTitle.toLowerCase();
+  const result = await db.execute(sql`
+    WITH current_skills AS (
+      SELECT js.skill_abr
+      FROM ${job_skills} js
+      JOIN ${postings} p ON js.job_id = p.job_id
+      LEFT JOIN ${roleAliases} ra ON lower(p.title) = lower(ra.alias)
+      WHERE coalesce(lower(ra.canonical_name), lower(p.title)) = ${roleLower}
+      GROUP BY js.skill_abr
+      ORDER BY count(*) DESC
+      LIMIT 10
+    ),
+    related AS (
+      SELECT
+        coalesce(ra2.canonical_name, p2.title)                              AS canonical_name,
+        lower(
+          trim(both '-' from regexp_replace(
+            regexp_replace(
+              trim(coalesce(coalesce(ra2.canonical_name, p2.title)::text, '')),
+              '[^a-zA-Z0-9\\s_-]+', '', 'g'
+            ),
+            '[\\s_-]+', '-', 'g'
+          ))
+        )                                                                    AS slug,
+        count(DISTINCT js2.skill_abr)::int                                  AS overlap_count,
+        count(DISTINCT p2.job_id)::int                                      AS total_postings
+      FROM ${job_skills} js2
+      JOIN current_skills cs  ON js2.skill_abr = cs.skill_abr
+      JOIN ${postings} p2     ON js2.job_id    = p2.job_id
+      LEFT JOIN ${roleAliases} ra2 ON lower(p2.title) = lower(ra2.alias)
+      WHERE coalesce(lower(ra2.canonical_name), lower(p2.title)) != ${roleLower}
+      GROUP BY coalesce(ra2.canonical_name, p2.title)
+      ORDER BY overlap_count DESC, total_postings DESC
+      LIMIT ${limit}
+    )
+    SELECT canonical_name, slug, overlap_count, total_postings FROM related
+  `);
+  return result.rows as {
+    canonical_name: string;
+    slug: string;
+    overlap_count: number;
+    total_postings: number;
+  }[];
+}
+
+// ===========================
 // Role statistics with normalized salaries
 // ===========================
 export async function getRoleStats(roleTitle: string) {
