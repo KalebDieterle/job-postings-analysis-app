@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
 import dynamic from "next/dynamic";
+import "leaflet/dist/leaflet.css";
 
 const HeatLayer = dynamic(() => import("./heat-layer"), { ssr: false }) as any;
 
@@ -27,13 +28,19 @@ interface LeafletMapInnerProps {
   blur: number;
 }
 
-// Fixes fragmented tiles by forcing Leaflet to recalculate container size after mount.
-// Required because the container dimensions may not be fully resolved when Leaflet initializes.
+// Uses ResizeObserver so invalidateSize fires exactly when the container
+// dimensions are finalized — no timeout guessing.
 function MapResizer() {
   const map = useMap();
   useEffect(() => {
-    const timer = setTimeout(() => map.invalidateSize(), 50);
-    return () => clearTimeout(timer);
+    const container = map.getContainer();
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    observer.observe(container);
+    // Also fire immediately in case the container already has its final size.
+    map.invalidateSize();
+    return () => observer.disconnect();
   }, [map]);
   return null;
 }

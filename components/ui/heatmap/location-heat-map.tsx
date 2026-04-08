@@ -34,19 +34,7 @@ export default function LocationHeatMap({ data }: { data: LocationData[] }) {
   const [blur, setBlur] = useState(12);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
-    link.crossOrigin = "";
-    document.head.appendChild(link);
-
-    link.onload = () => setIsMounted(true);
-    // Fallback in case onload doesn't fire
-    const fallback = setTimeout(() => setIsMounted(true), 500);
-    return () => clearTimeout(fallback);
+    setIsMounted(true);
   }, []);
 
   if (!isMounted) {
